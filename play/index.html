@@ -267,12 +267,12 @@ const TIERS = [
   { name: 'Hexa',   shape: 'hexagon',  r: 50,  c: '#8b5cf6', mouth: 'cat',    lid: 0.1,  brow: 0,    blushy: 0 },   // cheeky
   { name: 'Nimbus', shape: 'cloud',    r: 62,  c: '#e6edf7', mouth: 'sleepy', lid: 0.5,  brow: 0,    blushy: 1 },   // dozy
   { name: 'Bloom',  shape: 'flower',   r: 76,  c: '#2ee6b8', mouth: 'blush',  lid: 0,    brow: 0.4,  blushy: 1 },   // shy
-  { name: 'Nova',   shape: 'star',     r: 92,  c: '#ffcf33', mouth: 'toothy', lid: 0,    brow: 0.5,  blushy: 0 },   // showoff
+  { name: 'Ember',  shape: 'sun',      r: 92,  c: '#ff4a3d', mouth: 'grin',   lid: 0,    brow: 0.7,  blushy: 0, ember: true },   // fiery hype bot (replaced Nova; same tier slot / radius / stats index)
   { name: 'Grok',   shape: 'pebble',   r: 110, c: '#0b0b0d', grok: true, mouth: 'smug', lid: 0.2, brow: 0, blushy: 0 }, // cool
 ];
 const TOP = TIERS.length - 1;
 // per-tier rolling: [slow damp/substep, fast damp/substep, spin cap k (x v/r), cap offset]. Was 0.97 / 0.993 / 1.2 / 0.5 for everyone.
-const ROUNDISH = new Set(['circle', 'pill', 'hexagon', 'cloud', 'flower', 'pebble']);
+const ROUNDISH = new Set(['circle', 'pill', 'hexagon', 'cloud', 'flower', 'sun', 'pebble']);
 const ROLL = TIERS.map(T => ROUNDISH.has(T.shape) ? [0.99, 0.999, 2.3, 1.8] : [0.98, 0.996, 1.5, 0.9]);
 const POINTS = [1, 3, 6, 10, 15, 21, 28, 36, 45, 55];
 const SPAWN_W = [30, 26, 20, 14, 10];
@@ -295,6 +295,7 @@ function centerPts(pts) {
 function shapePoints(shape) {
   switch (shape) {
     case 'circle': return smoothRadial(() => 1, 96, 0);
+    case 'sun': return smoothRadial(() => 1, 120, 0);   // plain circle: rolls like a ball, nothing jams
     case 'pill': { const pts = [], hw = 1, hh = 0.72, rr = hh;
       for (let i = 0; i < 120; i++) { const t = i / 120 * TAU; const cx = Math.cos(t) >= 0 ? hw - rr : -(hw - rr); pts.push([cx + Math.cos(t) * rr, Math.sin(t) * rr]); } return pts; }
     case 'triangle': return normPts(centerPts(smoothRadial(th => 0.7 * polyR(3, 0.56, -Math.PI / 2)(th) + 0.3, 180, 9)), 1.12);
@@ -437,7 +438,7 @@ function buildCollision(T) {
 
 // eye placement per shape (unit space): y offset, half-spacing, size scale
 const EYES = { circle: [-0.08, 0.3, 1], pill: [-0.06, 0.3, 0.95], triangle: [0.12, 0.24, 0.85], square: [-0.06, 0.3, 1], teardrop: [0.2, 0.26, 0.9],
-  hexagon: [-0.05, 0.3, 1], cloud: [0.0, 0.3, 0.95], heart: [-0.08, 0.3, 0.95], flower: [-0.04, 0.26, 0.9], star: [0.06, 0.22, 0.85], pebble: [-0.1, 0.27, 1.05] };
+  hexagon: [-0.05, 0.3, 1], cloud: [0.0, 0.3, 0.95], heart: [-0.08, 0.3, 0.95], flower: [-0.04, 0.26, 0.9], star: [0.06, 0.22, 0.85], sun: [-0.06, 0.28, 1], pebble: [-0.1, 0.27, 1.05] };
 for (const T of TIERS) {
   T.pts = shapePoints(T.shape);
   buildCollision(T);
@@ -447,6 +448,7 @@ for (const T of TIERS) {
   T.rim = T.grok ? 'rgba(255,255,255,.9)' : mix(T.c, '#000000', 0.45);
   T.eye = T.grok || T.shape === 'heart' || T.shape === 'hexagon' || T.shape === 'square' ? '#ffffff' : '#101114';
   T.e = EYES[T.shape];
+  if (T.ember) { T.hi = '#ffb27a'; T.lo = '#e0262f'; T.rim = '#8e1018'; T.eye = '#2a0505'; }   // hot core -> crimson edge
 }
 
 // ================================================================ DOM
@@ -546,10 +548,12 @@ const sfx = {
     const wv = waves[tier % waves.length], v = wv === 'square' || wv === 'sawtooth' ? 0.06 : 0.22;
     tone(base, base * 2, 0.08, wv, v); tone(base * 1.5, base * 1.5, 0.16, 'sine', 0.14, 0.05); tone(base * 0.5, base * 0.75, 0.2, 'sine', 0.2);
     noise(0.05, 2000 + tier * 300, 0.08);
+    if (TIERS[tier] && TIERS[tier].ember) { noise(0.35, 500, 0.16, 'bandpass', 2600); tone(110, 330, 0.3, 'sawtooth', 0.04); }   // Ember: fiery fwoosh
   },
   drop() { tone(520, 300, 0.09, 'triangle', 0.1); tone(900, 1200, 0.05, 'sine', 0.04, 0.02); },
   tick(v) { const now = performance.now(); if (now - lastTick < 70) return; lastTick = now; tone(700 + Math.random() * 300, 380, 0.04, 'sine', Math.min(0.09, v / 5000)); },
   slap() { noise(0.08, 2600, 0.35, 'highpass'); tone(320, 140, 0.07, 'triangle', 0.12); },
+  hype() { const now = performance.now(); if (now - (this._hy || 0) < 400) return; this._hy = now; tone(520, 880, 0.14, 'triangle', 0.07); tone(660, 1175, 0.16, 'triangle', 0.06, 0.08); noise(0.12, 1800, 0.05, 'bandpass', 3200, 0.04); },
   clap() { noise(0.05, 3500, 0.25, 'bandpass'); tone(1300, 1700, 0.08, 'sine', 0.06, 0.03); },
   aww() { tone(660, 880, 0.18, 'sine', 0.06); tone(880, 990, 0.2, 'sine', 0.05, 0.12); },
   unlock() { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, f, 0.22, 'triangle', 0.12, i * 0.06)); noise(0.3, 7000, 0.04, 'highpass', null, 0.2); },
@@ -1023,7 +1027,7 @@ function step(dt) {
     if (m.sleep || m.mv < 60) continue;
     for (const b of bots) if (b.sleep && !(m.x0 > b.x1 + 4 || b.x0 > m.x1 + 4 || m.y0 > b.y1 + 4 || b.y0 > m.y1 + 4)) wake(b);
   }
-  for (const b of bots) { const dv = b.pvy - b.vy; if (dv > 220 && b.vy < -15 && b.landed) { sfx.tick(dv); if (dv > 450) haptic('tick'); if (!b.expr) react(b, 'squint', 0.25); b.pop = Math.max(b.pop, Math.min(0.4, dv / 1500)); } b.pvy = b.vy; }
+  for (const b of bots) { const dv = b.pvy - b.vy; if (dv > 220 && b.vy < -15 && b.landed) { emberBump(b); sfx.tick(dv); if (dv > 450) haptic('tick'); if (!b.expr) react(b, 'squint', 0.25); b.pop = Math.max(b.pop, Math.min(0.4, dv / 1500)); } b.pvy = b.vy; }
   // rescue: a smaller bot whose centre ended up inside a bigger bot's outline (tunnelled into a concave part) gets pushed back out
   for (const A of bots) { if (A.sleep) continue;
     for (const B of bots) { if (B === A || B.r <= A.r || A.x < B.x0 || A.x > B.x1 || A.y < B.y0 || A.y > B.y1 || !pointInBot(B, A.x, A.y)) continue;
@@ -1042,8 +1046,15 @@ function step(dt) {
     if (dangerT > 2.2) gameOver();
   } else dangerT = 0;
 }
-function land(b) { b.landed = true; const v = Math.hypot(b.vx, b.vy); if (v > 250) { sfx.land(v); b.pop = Math.max(b.pop, 0.35); if (!b.expr) react(b, 'squint', 0.35); } }
+function land(b) { b.landed = true; const v = Math.hypot(b.vx, b.vy); if (v > 250) for (const o of bots) if (o !== b && TIERS[o.t].ember && Math.hypot(o.x - b.x, o.y - b.y) < o.r + b.r + 6) emberBump(o);
+  if (v > 250) { sfx.land(v); b.pop = Math.max(b.pop, 0.35); if (!b.expr) react(b, 'squint', 0.35); } }
 function react(b, e, d) { b.expr = e; b.exprT = d; }
+function emberHeat(b, dt) {   // Ember: base glow, +hot near another Ember (merge partner), puffs up + glows brighter when bumped, then cools
+  let near = 0; for (const o of bots) if (o !== b && o.t === b.t && !o.dead) { const d = Math.hypot(o.x - b.x, o.y - b.y); near = Math.max(near, 1 - Math.max(0, d - (o.r + b.r)) / (b.r * 1.5)); }
+  b.puff = Math.max(0, (b.puff || 0) - dt * 1.4);
+  const target = 0.4 + 0.6 * Math.max(0, near) + 0.7 * b.puff; b.heat = (b.heat ?? 0.4) + (target - (b.heat ?? 0.4)) * Math.min(1, dt * 5);
+}
+function emberBump(b) { if (!TIERS[b.t].ember) return; b.puff = 1; react(b, 'cheer', 0.6); }
 
 // shrink a freshly merged bot until it doesn't poke into any neighbour (it then grows as room allows)
 // merged bot spawns at FULL size. Pick the spot: the contact midpoint, nudged against gravity into free space (fewest
@@ -1114,6 +1125,7 @@ function doMerge(a, b) {
   ring(x, y, T.r * 1.45, T.grok ? '#ffffff' : T.c);
   floatText(x, y - T.r * 0.3, '+' + pts, 16 + nt * 1.4, '#ffffff');
   sfx.merge(nt, combo); haptic('merge', nt);
+  { let cheered = false; for (const o of bots) if (TIERS[o.t].ember && o !== nb) { react(o, 'cheer', 0.9); o.pop = Math.max(o.pop || 0, 0.45); o.puff = Math.max(o.puff || 0, 0.5); cheered = true; } if (cheered) sfx.hype(); }   // Ember hypes every merge
   shake = Math.max(shake, 1.5 + nt * 1.1);   // shake scales with merge size
   for (const o of bots) if (o !== nb && Math.hypot(o.x - x, o.y - y) < T.r * 2.2) { o.look = { x, y, t: 0.8 }; if (!o.expr) react(o, 'happy', 0.5); }
   if (nt > topReached && state === 'playing') {
@@ -1264,7 +1276,7 @@ function drop() {
   return true;
 }
 const SHARE_URL = 'https://auggiepeery.github.io/grok-drop/play/';
-const TIER_EMOJI = ['🔵', '🟢', '🔺', '🟦', '💗', '🟣', '☁️', '🌸', '⭐', '⚫'];
+const TIER_EMOJI = ['🔵', '🟢', '🔺', '🟦', '💗', '🟣', '☁️', '🌸', '🔥', '⚫'];
 // "how close": the two biggest bots on the board; growing the 2nd up to the biggest and merging them reaches the next tier
 function closeness(list) {   // merges still needed for the next tier: grow the two biggest bots (<= best tier) to it, then merge them
   const top = topReached; if (top >= TOP) return { next: TOP, merges: 0 };
@@ -1312,6 +1324,7 @@ function gameOver() {
   }, F + Math.min(list.length * per, 600) + 200);   // card <= 0.8 s after the freeze
 }
 function restart() {
+  pendingRet = null; slapCD.clear(); slapLog = [];
   bots = []; particles = []; floats = []; finale = null; finEnd = null; interT = 3; inter = null;
   score = 0; dangerT = 0; dropQ = false; runMerges = 0; overT = -1; overBot = dangerBot = null; overInfo = null; combo = 0; comboT = 9; shake = 0; flash = 0; aiming = false; dropCD = 0.2; topReached = 0;
   gx = 0; gy = 1; gdir = 0; gTo = 0; turnT = -1; flipT = FLIP_EVERY; nextDir = -1; flipHold = 0; flips = 0; tilt = 0; tiltKick = 0; zenT = 0; zenCleared = 0;
@@ -1459,6 +1472,13 @@ function drawBot(c, t, x, y, r, o = {}) {
   c.save();
   c.translate(x, y);
   if (o.alpha != null) c.globalAlpha = o.alpha;
+  if (T.ember) {   // flickering heat halo (hotter when bumped / near its merge partner)
+    const ht = Math.max(0, Math.min(1.6, o.heat == null ? 0.4 : o.heat)), tt = o.t || 0, fl = 0.85 + 0.1 * Math.sin(tt * 11.3) + 0.06 * Math.sin(tt * 23.7 + 1.3);
+    const R2 = r * (1.22 + 0.22 * ht) * fl, g = c.createRadialGradient(0, 0, r * 0.75, 0, 0, R2);
+    g.addColorStop(0, `rgba(255,120,60,${0.32 + 0.3 * ht})`); g.addColorStop(0.55, `rgba(255,60,40,${0.12 + 0.16 * ht})`); g.addColorStop(1, 'rgba(255,40,30,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(0, 0, R2, 0, TAU); c.fill();
+    if (o.puff) r *= 1 + 0.08 * o.puff;
+  }
   // soft glow halo (Grok tier always glows)
   if (T.grok || o.glow) {
     const g = c.createRadialGradient(0, 0, r * 0.7, 0, 0, r * 1.5);
@@ -1519,6 +1539,11 @@ function drawBot(c, t, x, y, r, o = {}) {
   // blush
   const bl = Math.max(o.blush || 0, ex === 'blushing' ? 1 : 0, (!ex && T.blushy) ? 0.45 : 0, ex === 'happy' && T.blushy ? 0.7 : 0);
   if (bl > 0.05 && r > 9) { c.fillStyle = `rgba(255,105,150,${0.45 * bl})`; for (const side of [-1, 1]) { c.beginPath(); c.ellipse(side * (es + 0.13 * ez), ey + 0.2 * ez, 0.1 * ez, 0.055 * ez, 0, 0, TAU); c.fill(); } }
+  // anger: red flush + 💢 vein (slapped bot, ~2.5 s)
+  if (o.anger > 0 && r > 9) { const k = Math.min(1, o.anger);
+    c.save(); c.clip(T.path); c.fillStyle = `rgba(255,40,40,${0.28 * k})`; c.fillRect(-1.5, -1.5, 3, 3); c.restore();
+    c.save(); c.translate(0.55, -0.62); c.scale(1 / r, 1 / r); c.globalAlpha *= k; const fs = Math.max(10, r * 0.5) * (1 + 0.12 * Math.sin((o.t || 0) * 12));
+    c.font = `${fs}px system-ui,"Apple Color Emoji","Segoe UI Emoji",sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('💢', 0, 0); c.restore(); }
   // sweat drop
   if (o.sweat > 0 && r > 9) { const ph = ((o.t || 0) * 1.3) % 1; c.fillStyle = `rgba(150,215,255,${0.9 * (1 - ph)})`; c.save(); c.translate(es + 0.22 * ez, ey - 0.25 * ez + ph * 0.3); c.scale(0.07 * ez, 0.07 * ez);
     c.beginPath(); c.moveTo(0, -1.6); c.quadraticCurveTo(1, 0, 0.9, 0.5); c.arc(0, 0.5, 0.9, 0, Math.PI); c.quadraticCurveTo(-1, 0, 0, -1.6); c.fill(); c.restore(); }
@@ -1552,7 +1577,7 @@ function drawMouth(c, T, ex, ey, ez, o) {
 }
 
 // ================================================================ rendering: background (xAI-ish deep space)
-let bgStatic = null, stars = [], shooting = [];
+let bgStatic = null, stars = [];
 function buildBg() {
   const w = innerWidth, h = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2);
   bgC.width = Math.round(w * dpr); bgC.height = Math.round(h * dpr);
@@ -1608,15 +1633,76 @@ function drawBg(dt) {
     bctx.beginPath(); bctx.arc(s.x, s.y, s.s * 0.6, 0, TAU); bctx.fill();
   }
   bctx.globalAlpha = 1;
-  if (Math.random() < dt * 0.12 && shooting.length < 2) shooting.push({ x: Math.random() * w, y: Math.random() * h * 0.5, vx: -(300 + Math.random() * 300), vy: 120 + Math.random() * 120, life: 0, max: 0.9 });
-  for (const m of shooting) {
-    m.life += dt; m.x += m.vx * dt; m.y += m.vy * dt;
-    const a = Math.sin(Math.PI * m.life / m.max), g = bctx.createLinearGradient(m.x, m.y, m.x - m.vx * 0.18, m.y - m.vy * 0.18);
-    g.addColorStop(0, `rgba(255,255,255,${0.8 * a})`); g.addColorStop(1, 'rgba(255,255,255,0)');
-    bctx.strokeStyle = g; bctx.lineWidth = 1.3; bctx.beginPath(); bctx.moveTo(m.x, m.y); bctx.lineTo(m.x - m.vx * 0.18, m.y - m.vy * 0.18); bctx.stroke();
-  }
-  shooting = shooting.filter(m => m.life < m.max);
+  drawShooting(dt, w, h);
 }
+// ---------------------------------------------------------------- shooting stars (background canvas only: behind jar, bots and UI)
+// pooled (no per-frame allocation besides gradients), Poisson-ish spawns every ~1.5-4 s, occasional doubles, rare bright meteors
+// with a glowing tail + sparkle trail. Zen: slower/softer/a bit more often. Singularity: they streak toward the black hole.
+const REDUCED_MOTION = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const SH_POOL = Array.from({ length: 8 }, () => ({ on: false })), SPARKS = Array.from({ length: 48 }, () => ({ life: 0 }));
+let shNext = 1.2, shWish = 0;
+function finaleScreen() {   // black hole position in background (CSS px) coordinates
+  if (!finale) return null; const r = canvas.getBoundingClientRect();
+  return { x: r.left + view.ox + finale.x * view.scale, y: r.top + view.oy + finale.y * view.scale };
+}
+function spawnShooting(w, h, rare, hole) {
+  const m = SH_POOL.find(o => !o.on); if (!m) return;
+  const zen = mode === 'zen', sp = (zen ? 0.55 : 1) * (rare ? 0.75 : 1);
+  const ang = (hole ? 0 : (Math.random() < 0.5 ? 1 : -1)) + 0;
+  let x, y, vx, vy;
+  if (hole) { const a = Math.random() * TAU, d = Math.max(w, h) * (0.55 + Math.random() * 0.3); x = hole.x + Math.cos(a) * d; y = hole.y + Math.sin(a) * d; const v = 700 + Math.random() * 500; vx = (hole.x - x) / d * v; vy = (hole.y - y) / d * v; }
+  else { const dir = ang, th = (0.18 + Math.random() * 0.45) * Math.PI / 2, v = (380 + Math.random() * 520) * sp;   // 16..56 deg below horizontal
+    x = dir > 0 ? Math.random() * w * 0.7 - w * 0.1 : w * 0.3 + Math.random() * w * 0.8; y = -20 + Math.random() * h * 0.45; vx = dir * Math.cos(th) * v; vy = Math.sin(th) * v; }
+  Object.assign(m, { on: true, x, y, vx, vy, life: 0, max: hole ? 0.8 + Math.random() * 0.5 : (rare ? 1.6 : 0.6 + Math.random() * 0.7) / (zen ? 0.75 : 1),
+    len: (rare ? 0.32 : 0.1 + Math.random() * 0.14) * (hole ? 0.6 : 1), bri: (rare ? 1 : 0.45 + Math.random() * 0.5) * (zen ? 0.6 : 1), rare, hole: !!hole, w: rare ? 2.6 : 0.8 + Math.random() * 0.9, sp: 0,
+    tint: rare ? (Math.random() < 0.5 ? '255,214,140' : '170,210,255') : (Math.random() < 0.25 ? '200,220,255' : '255,255,255') });
+}
+function drawShooting(dt, w, h) {
+  const zen = mode === 'zen', hole = finaleScreen();
+  if (dt > 0) {
+    shNext -= dt * (REDUCED_MOTION ? 0.2 : 1) * (hole ? 6 : 1);
+    if (shNext <= 0) {
+      const rare = !hole && !REDUCED_MOTION && Math.random() < 0.08;
+      spawnShooting(w, h, rare, hole);
+      if (!rare && !REDUCED_MOTION && Math.random() < 0.18) { shNext = 0.12 + Math.random() * 0.35; }   // sometimes two close together
+      else shNext = (zen ? 1.1 : 1.5) + Math.random() * (zen ? 2.2 : 2.5);   // average ~2.75 s (zen ~2.2 s)
+    }
+  }
+  bctx.lineCap = 'round';
+  for (const m of SH_POOL) {
+    if (!m.on) continue;
+    if (dt > 0) {
+      m.life += dt;
+      if (m.hole && hole) { const dx = hole.x - m.x, dy = hole.y - m.y, d = Math.hypot(dx, dy) || 1, v = Math.hypot(m.vx, m.vy) * (1 + dt * 1.5); m.vx += (dx / d * v - m.vx) * Math.min(1, dt * 6); m.vy += (dy / d * v - m.vy) * Math.min(1, dt * 6); if (d < 18) m.life = m.max; }
+      m.x += m.vx * dt; m.y += m.vy * dt;
+      if (m.rare && !REDUCED_MOTION) { m.sp -= dt; if (m.sp <= 0) { m.sp = 0.02; const p = SPARKS.find(q => q.life <= 0); if (p) Object.assign(p, { x: m.x, y: m.y, vx: m.vx * 0.05 + (Math.random() - 0.5) * 40, vy: m.vy * 0.05 + (Math.random() - 0.5) * 40 + 20, life: 0.5 + Math.random() * 0.5, max: 1, tint: m.tint }); } }
+    }
+    const k = m.life / m.max, a = m.bri * Math.min(1, k / 0.15) * Math.min(1, (1 - k) / 0.35);   // fade in / out
+    if (m.life >= m.max || a <= 0 && k > 0.5) { m.on = false; continue; }
+    const tx = m.x - m.vx * m.len, ty = m.y - m.vy * m.len, g = bctx.createLinearGradient(m.x, m.y, tx, ty);
+    g.addColorStop(0, `rgba(${m.tint},${a})`); g.addColorStop(0.25, `rgba(${m.tint},${a * 0.45})`); g.addColorStop(1, `rgba(${m.tint},0)`);
+    if (m.rare) { bctx.save(); bctx.shadowColor = `rgba(${m.tint},${a})`; bctx.shadowBlur = 14; }
+    bctx.strokeStyle = g; bctx.lineWidth = m.w; bctx.beginPath(); bctx.moveTo(m.x, m.y); bctx.lineTo(tx, ty); bctx.stroke();
+    bctx.fillStyle = `rgba(255,255,255,${a})`; bctx.beginPath(); bctx.arc(m.x, m.y, m.w * (m.rare ? 1.3 : 0.7), 0, TAU); bctx.fill();
+    if (m.rare) bctx.restore();
+  }
+  for (const p of SPARKS) {
+    if (p.life <= 0) continue;
+    if (dt > 0) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; }
+    bctx.fillStyle = `rgba(${p.tint},${Math.max(0, Math.min(1, p.life * 1.6))})`; bctx.fillRect(p.x - 0.8, p.y - 0.8, 1.6, 1.6);
+  }
+}
+// wish easter egg: tap a meteor on the background (outside the game canvas / buttons, so it never interferes with dropping)
+document.addEventListener('pointerdown', e => {
+  if (e.target.closest && e.target.closest('canvas#game, button, .overlay, #collection, #hud, input, a')) return;
+  for (const m of SH_POOL) {
+    if (!m.on || m.hole) continue;
+    const tx = m.x - m.vx * m.len, ty = m.y - m.vy * m.len, dx = tx - m.x, dy = ty - m.y, l = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((e.clientX - m.x) * dx + (e.clientY - m.y) * dy) / l)), d = Math.hypot(e.clientX - m.x - dx * t, e.clientY - m.y - dy * t);
+    if (d < 28) { m.life = m.max; shWish++; for (let i = 0; i < 14; i++) { const p = SPARKS.find(q => q.life <= 0); if (!p) break; const a = Math.random() * TAU, v = 40 + Math.random() * 120; Object.assign(p, { x: e.clientX, y: e.clientY, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6 + Math.random() * 0.6, tint: '255,214,140' }); }
+      ensureAudio(); [880, 1175, 1568].forEach((f, j) => tone(f, f * 1.01, 0.18, 'sine', 0.05, j * 0.06)); if (shWish === 1) toast('MAKE A WISH ✨'); return; }
+  }
+}, true);
 
 // ================================================================ rendering: jar + game
 function resize() {
@@ -1815,12 +1901,12 @@ function render(dt) {
     b.ly += ((sp > 40 ? b.vy / sp : -0.4) - b.ly) * Math.min(1, dt * 6);
     if (b.look) { const dx = b.look.x - b.x, dy = b.look.y - b.y, dd = Math.hypot(dx, dy) || 1; b.lx = dx / dd; b.ly = dy / dd; }
     const pp = b.pop > 0 ? Math.sin(b.pop * 14) * b.pop * 0.22 : 0;   // squash & stretch wobble
-    const nv = b.nerv || 0, jit = nv > 0.4 ? Math.sin(time * 40 + b.id) * nv * 0.8 : 0;
+    const nv = b.nerv || 0, ang = b.anger > 0 ? Math.min(1, b.anger) : 0, jit = (nv > 0.4 ? Math.sin(time * 40 + b.id) * nv * 0.8 : 0) + ang * Math.sin(time * 55 + b.id) * 1.1;
     let ex = b.expr || (nv > 0.35 ? 'nervous' : null);
     if (b.fade != null) c.globalAlpha = 1 - b.fade * 0.7;
     const popS = b.spawnFx > 0 ? 1 + 0.12 * Math.sin(Math.PI * (1 - b.spawnFx / SPAWN_FX)) : 1;   // merge pop: drawing only
-    drawBot(c, b.t, b.x + jit, b.y, b.r * popS, { a: b.a, lx: b.lx, ly: b.ly, sx: 1 + pp, sy: 1 - pp,
-      blink: b.blinkT > 0 && ex !== 'shock' ? 1 : 0, happy: b.happy > 0 ? 1 : 0, expr: ex, wink: b.wink, blush: b.blush, sweat: nv > 0.35 ? nv : 0, t: time + b.id });
+    drawBot(c, b.t, b.x + jit, b.y, b.r * popS, { a: b.a, lx: b.lx, ly: b.ly, sx: 1 + pp + ang * 0.05, sy: 1 - pp + ang * 0.05,
+      blink: b.blinkT > 0 && ex !== 'shock' ? 1 : 0, happy: b.happy > 0 ? 1 : 0, expr: ex, wink: b.wink, blush: b.blush, sweat: nv > 0.35 ? nv : 0, t: time + b.id, heat: b.heat, puff: b.puff, anger: ang });
     c.globalAlpha = 1;
   }
   drawInteraction(c);
@@ -1885,7 +1971,13 @@ function drawLadder() {
 
 // ================================================================ bot interactions (cute, rare, small nudges)
 let inter = null, interT = 3, interOn = true, testHold = false;   // testHold: test hook, freezes the frame loop (state unchanged)
-const INTER_KINDS = ['smile', 'wink', 'slap', 'highfive', 'blush', 'slap', 'smile'];
+const INTER_W = { smile: 2.2, wink: 1.1, slap: 2.0, highfive: 1.3, blush: 1.1 };   // slap ~27% (1 in ~3.7) for ordinary pairs; Trix pairs slap more
+function pickKind(A, B) { const w = Object.assign({}, INTER_W); if (A.t === 2 || B.t === 2) w.slap *= 1.6; let tot = 0; for (const k in w) tot += w[k]; let r = Math.random() * tot; for (const k in w) { r -= w[k]; if (r < 0) return k; } return 'smile'; }
+// slaps: B gets angry (~2.5 s, glares at A); retaliates only ~28% of the time after a 0.5-0.9 s beat (bigger wind-up),
+// then the pair is on a 8-12 s slap cooldown. A retaliation never triggers another slap => at most 2 slaps per pair per cooldown.
+const SLAP_RET_P = 0.28, slapCD = new Map(); let pendingRet = null, slapLog = [];
+const pairKey = (A, B) => Math.min(A.id, B.id) + '-' + Math.max(A.id, B.id);
+function slapBlocked(A, B) { return (slapCD.get(pairKey(A, B)) || 0) > time || A.anger > 0 || B.anger > 0 || (pendingRet && (pendingRet.A === A || pendingRet.A === B || pendingRet.B === A || pendingRet.B === B)); }
 function restingish(b) { return b.sleep || (b.landed && Math.hypot(b.vx, b.vy) < 15); }
 function pickInteraction(force) {
   const cand = [];
@@ -1894,14 +1986,24 @@ function pickInteraction(force) {
       const d = Math.hypot(A.x - B.x, A.y - B.y); if (d < (A.r + B.r) * 1.15) cand.push([A, B]); } }
   if (!cand.length) return null;
   let [A, B] = cand[(Math.random() * cand.length) | 0];
-  let kind = force || INTER_KINDS[(Math.random() * INTER_KINDS.length) | 0];
+  let kind = force || pickKind(A, B);
+  if (kind === 'slap' && slapBlocked(A, B) && force !== 'slap') kind = Math.random() < 0.5 ? 'smile' : 'wink';   // no slap trading / repeats
   if (mode === 'zen' && !force && kind === 'slap') kind = Math.random() < 0.5 ? 'highfive' : 'blush';   // zen bots are nicer to each other
-  if (kind === 'slap' && (B.t === 2 || (A.t !== 2 && Math.random() < 0.5))) [A, B] = [B, A];   // Trix loves to slap
+  const em = TIERS[A.t].ember || TIERS[B.t].ember;
+  if (em && !force) { const q = Math.random(); kind = q < 0.6 ? 'highfive' : q < 0.78 && mode !== 'zen' ? 'slap' : kind; if (kind === 'slap' && !TIERS[A.t].ember && B.t !== 2) [A, B] = [B, A]; }
+  if (kind === 'slap' && !(em && TIERS[A.t].ember) && (B.t === 2 || (A.t !== 2 && Math.random() < 0.5))) [A, B] = [B, A];   // Trix loves to slap
+  if (kind !== 'slap' && (A.anger > 0 || B.anger > 0)) return null;   // an angry bot isn't in the mood
   return { A, B, kind, t: 0, dur: (kind === 'slap' ? 1.6 : 1.5) * (mode === 'zen' ? 1.35 : 1), hit: false };
 }
 function updateInteraction(dt) {
+  for (const b of bots) if (b.anger > 0) { b.anger -= dt; const S = bots.find(o => o.id === b.angryAt);
+    if (b.anger <= 0) { b.anger = 0; if (b.pout) { react(b, 'smug', 1.0); } }
+    else { react(b, 'annoyed', 0.2); if (S) { const tx = b.pout && b.anger < 1 ? 2 * b.x - S.x : S.x; b.look = { x: tx, y: S.y, t: 0.2 }; }   // glares (or turns away, pouting)
+      b.huff = (b.huff || 0) - dt; if (b.huff <= 0) { b.huff = 0.55 + Math.random() * 0.4; burst(b.x + b.r * 0.5, b.y - b.r * 0.8, '#d9dde6', 3, 50, 2); } } }
   if (finale || state !== 'playing' && state !== 'editor') { inter = null; return; }
   if (!interOn && !inter) return;
+  if (!inter && pendingRet && time >= pendingRet.at) { const P = pendingRet; pendingRet = null;
+    if (!P.A.dead && !P.B.dead && bots.includes(P.A) && bots.includes(P.B)) inter = { A: P.A, B: P.B, kind: 'slap', ret: true, t: 0, dur: 2.0, hit: false }; }
   if (!inter) { interT -= dt; if (interT > 0) return; interT = (3.5 + Math.random() * 3.5) * (mode === 'zen' ? 2.2 : 1); inter = pickInteraction(); if (!inter) return; }
   const I = inter, A = I.A, B = I.B; I.t += dt;
   if (A.dead || B.dead || !bots.includes(A) || !bots.includes(B)) { inter = null; return; }
@@ -1912,16 +2014,38 @@ function updateInteraction(dt) {
   else if (I.kind === 'blush') { react(A, 'blushing', 0.3); react(B, 'blushing', 0.3); A.blush = B.blush = 1;
     if (!I.hit && I.t > 0.4) { I.hit = true; burst(mx, my - 20, '#ffb3c7', 6, 60, 2); sfx.aww(); } }
   else if (I.kind === 'highfive') { react(A, 'happy', 0.3); react(B, 'happy', 0.3);
-    if (!I.hit && I.t > 0.55) { I.hit = true; burst(mx, my - Math.min(A.r, B.r) * 0.6, '#ffd23f', 12, 160, 2.2); sfx.clap(); } }
-  else if (I.kind === 'slap') { react(A, I.t < 0.5 ? 'smirk' : 'smug', 0.3);
-    if (!I.hit && I.t > 0.5) { I.hit = true;
+    if (!I.hit && I.t >= HF_IN) { I.hit = true; const hot = TIERS[A.t].ember || TIERS[B.t].ember, HM = hfGeom(A, B, HF_IN).M; burst(HM.x, HM.y, hot ? '#ff6a3d' : '#ffd23f', hot ? 20 : 12, hot ? 220 : 160, 2.2); sfx.clap(); if (hot) { for (const e of [A, B]) if (TIERS[e.t].ember) { e.puff = 1; react(e, 'cheer', 0.6); } sfx.hype(); } } }
+  else if (I.kind === 'slap') { const HIT = I.ret ? 0.85 : 0.5; react(A, I.ret ? 'annoyed' : I.t < HIT ? 'smirk' : 'smug', 0.3);
+    if (!I.hit && I.t > HIT) { I.hit = true;
       const dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy) || 1;
       const px = A.x + dx / d * (A.r * 0.9), py = A.y + dy / d * (A.r * 0.9) - A.r * 0.2;
-      burst(px, py, '#ffffff', 8, 140, 2); ring(px, py, 10, '#ffffff', 0.3); floatText(px, py - 14, 'slap!', 13, '#ffffff', 0.7);
-      sfx.slap(); haptic('slap'); stat('slapGiven', A.t); stat('slapTaken', B.t); react(B, Math.random() < 0.5 ? 'shock' : 'annoyed', 1.0); B.pop = 0.4; shake = Math.max(shake, 2);
-      wake(B); B.vx += dx / d * 55; B.vy -= 45; B.w += (dx > 0 ? 1 : -1) * 0.8; }
-    if (I.hit) react(B, B.expr === 'shock' || B.expr === 'annoyed' ? B.expr : 'annoyed', 0.4); }
+      const fire = TIERS[A.t].ember, pw = I.ret ? 1.35 : 1;
+      burst(px, py, '#ffffff', 8, 140, 2); ring(px, py, 10 * pw, '#ffffff', 0.3); floatText(px, py - 14, I.ret ? 'SLAP!' : 'slap!', I.ret ? 16 : 13, '#ffffff', 0.7);
+      if (fire) { burst(px, py, '#ff6a3d', 18, 220, 2.6); burst(px, py, '#ffd23f', 8, 160, 2); ring(px, py, 22, '#ff4a3d', 0.35); A.puff = 1; }   // Ember slaps with extra fire
+      slapLog.push({ a: A.id, b: B.id, t: time, ret: !!I.ret });
+      if (I.ret) { react(B, 'shock', 1.4); B.anger = 0; slapCD.set(pairKey(A, B), time + 8 + Math.random() * 4); }
+      else { B.anger = 2.2 + Math.random() * 0.8; B.angryAt = A.id; B.pout = Math.random() < 0.35; B.huff = 0.3;
+        slapCD.set(pairKey(A, B), time + 8 + Math.random() * 4);
+        if (mode !== 'zen' && Math.random() < SLAP_RET_P) { B.pout = false; I.dur = Math.min(I.dur, I.t + 0.35); pendingRet = { A: B, B: A, at: time + 0.5 + Math.random() * 0.4 }; } }   // beat measured from the hit
+      sfx.slap(); haptic('slap'); stat('slapGiven', A.t); stat('slapTaken', B.t); if (!I.ret) react(B, 'annoyed', 1.0); B.pop = 0.4 * pw; shake = Math.max(shake, 2 * pw);
+      wake(B); B.vx += dx / d * 55 * pw; B.vy -= 45 * pw; B.w += (dx > 0 ? 1 : -1) * 0.8; }
+    if (I.hit && !I.ret) react(B, 'annoyed', 0.4); }
   if (I.t >= I.dur) { A.wink = 0; inter = null; }
+}
+// high-five geometry: both paws travel from their bot to ONE meeting point (middle of the gap between the two surfaces, lifted a bit)
+// and their tips stop exactly there (ease-out in 0.45 s, hold 0.12 s with a spark, ease-in back by 0.95 s). No overshoot.
+const HF_IN = 0.45, HF_HOLD = 0.12, HF_OUT = 0.38;
+function hfEase(t) { if (t <= HF_IN) { const p = t / HF_IN; return 1 - Math.pow(1 - p, 3); } if (t <= HF_IN + HF_HOLD) return 1; const q = Math.min(1, (t - HF_IN - HF_HOLD) / HF_OUT); return 1 - q * q * q; }
+function hfGeom(A, B, t) {
+  const dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d;
+  const szA = Math.max(4, Math.min(11, A.r * 0.22)), szB = Math.max(4, Math.min(11, B.r * 0.22));
+  const gapMid = (A.r + (d - B.r)) / 2, lift = Math.min(A.r, B.r) * 0.45;   // along A->B, middle of the two surfaces
+  const M = { x: A.x + ux * gapMid, y: A.y + uy * gapMid - lift };
+  const e = hfEase(t), one = (P, sz) => { const pm = Math.hypot(M.x - P.x, M.y - P.y) || 1, ho = Math.max(0, Math.min(P.r * 0.7, pm - sz - 1.5));   // home tip always short of M
+    const hx = P.x + (M.x - P.x) / pm * ho, hy = P.y + (M.y - P.y) / pm * ho;
+    const vx = M.x - hx, vy = M.y - hy, vl = Math.hypot(vx, vy) || 1, cx = M.x - vx / vl * sz, cy = M.y - vy / vl * sz;   // centre where the tip touches M
+    const px = hx + (cx - hx) * e, py = hy + (cy - hy) * e; return { x: px, y: py, sz, tx: px + vx / vl * sz, ty: py + vy / vl * sz }; };
+  return { M, e, a: one(A, szA), b: one(B, szB) };
 }
 function drawInteraction(c) {
   const I = inter; if (!I) return; const A = I.A, B = I.B;
@@ -1937,8 +2061,12 @@ function drawInteraction(c) {
   if (I.kind === 'slap') { const k = I.t < 0.25 ? -0.3 * I.t / 0.25 : I.t < 0.5 ? -0.3 + 1.3 * (I.t - 0.25) / 0.25 : Math.max(0, 1 - (I.t - 0.5) * 2.5);
     if (I.t < 1.0) { paw(A, B, Math.max(0, k), colA, szA);
       if (I.t > 0.4 && I.t < 0.65) { c.save(); c.strokeStyle = 'rgba(255,255,255,.7)'; c.lineWidth = 2; for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(A.x, A.y, A.r * (1.0 + i * 0.12), Math.atan2(uy, ux) - 0.6, Math.atan2(uy, ux) - 0.1); c.stroke(); } c.restore(); } } }
-  else if (I.kind === 'highfive') { const k = I.t < 0.55 ? I.t / 0.55 : Math.max(0, 1 - (I.t - 0.75) * 2.5);
-    if (I.t < 1.2) { paw(A, B, k, colA, szA); paw(B, A, k, colB, szB); } }
+  else if (I.kind === 'highfive') { if (I.t < HF_IN + HF_HOLD + HF_OUT) { const G = hfGeom(A, B, I.t);
+      const dot = (P, col) => { c.save(); c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 1.2; c.beginPath(); c.arc(P.x, P.y, P.sz, 0, TAU); c.fill(); c.stroke();
+        c.fillStyle = 'rgba(255,255,255,.45)'; c.beginPath(); c.arc(P.x - P.sz * 0.3, P.y - P.sz * 0.3, P.sz * 0.35, 0, TAU); c.fill(); c.restore(); };
+      dot(G.a, colA); dot(G.b, colB);
+      if (I.t > HF_IN - 0.02 && I.t < HF_IN + HF_HOLD + 0.08) { const k = (I.t - HF_IN + 0.02) / (HF_HOLD + 0.1); c.save(); c.globalAlpha = 1 - k; c.strokeStyle = '#fff6c8'; c.lineWidth = 2; c.lineCap = 'round';
+        for (let i = 0; i < 6; i++) { const an = i * TAU / 6 + 0.3, r0 = 4 + k * 6, r1 = 9 + k * 10; c.beginPath(); c.moveTo(G.M.x + Math.cos(an) * r0, G.M.y + Math.sin(an) * r0); c.lineTo(G.M.x + Math.cos(an) * r1, G.M.y + Math.sin(an) * r1); c.stroke(); } c.restore(); } } }
   else if (I.kind === 'blush' || I.kind === 'wink') { if (I.t > 0.5 && I.t < 1.4) { const k = (I.t - 0.5) / 0.9; c.save(); c.globalAlpha = 1 - k; c.fillStyle = '#ffd23f';
       const sx = (A.x + B.x) / 2, sy = (A.y + B.y) / 2 - Math.max(A.r, B.r) * 0.8 - k * 30; c.font = '900 14px system-ui'; c.textAlign = 'center'; c.fillText('✦', sx, sy); c.restore(); } }
 }
@@ -2066,7 +2194,7 @@ const BIO = [
   'Cheeky cat-mouth :3  Six sides, zero worries, always up to something.',
   'Sleepy cloud. Would rather nap on top of the pile than be part of it.',
   'Shy flower. Blushes when looked at. Secretly the kindest bot in the jar.',
-  'Toothy showoff. Shines brightest when everyone is watching.',
+  'Fiery hype bot, always pumped. Cheers every merge, puffs up and glows hotter when bumped, burns brightest next to another Ember. Big high-fives, hot-headed slaps.',
   'Smug. Knows the answer before you ask. Two of them bend spacetime.',
 ];
 let colOpen = false, colPausedIt = false, colCards = [], colT = 0, colLast = 0;
@@ -2165,6 +2293,7 @@ function update(dt) {
   updateTilt(dt);
   flash = Math.max(0, flash - dt * 1.6);
   const dz = state === 'playing' && !finale ? danger01() : 0;
+  for (const b of bots) if (TIERS[b.t].ember) emberHeat(b, dt);
   for (const b of bots) {
     b.blink -= dt; if (b.blink < 0) { b.blinkT = 0.12; b.blink = 2 + Math.random() * 5; }
     if (b.blinkT > 0) b.blinkT -= dt; if (b.happy > 0) b.happy -= dt;
@@ -2222,11 +2351,12 @@ window.GrokDrop = {
   drawnOutline(b) { const T = TIERS[b.t], c = Math.cos(b.a), s = Math.sin(b.a); return T.pts.map(([x, y]) => [b.x + (x * c - y * s) * b.r, b.y + (x * s + y * c) * b.r]); },
   contactPairs() { const out = new Set(); for (let k = 0; k < ccount; k++) { const C = cpool[k]; if (C.b && C.lam > 0) out.add(Math.min(C.a.id, C.b.id) + '-' + Math.max(C.a.id, C.b.id)); } return [...out]; },
   landingY, step: dt => step(dt || STEP), collisionInfo: () => TIERS.map(T => ({ name: T.name, verts: T.N, parts: T.parts.length })),
+  shooting: { pool: SH_POOL, spawn: (rare, n = 1) => { for (let i = 0; i < n; i++) spawnShooting(innerWidth, innerHeight, rare, finaleScreen()); }, get wishes() { return shWish; }, reduced: REDUCED_MOTION },
   toast, toastQueued, gameOver, randTier, get dangerT() { return dangerT; }, test: { setScore(v) { score = v; }, setBest(v) { best = v; }, firstDropHist(n) { const h = [0, 0, 0, 0, 0]; for (let i = 0; i < n; i++) h[randTier(3)]++; return h; } },
   get noRoom() { return noRoomNow; }, get dropQueued() { return dropQ; }, get combo() { return combo; }, get comboT() { return comboT; },
   get current() { return curTier; }, set current(t) { curTier = t; drawNext(); },
   get finale() { return finale; }, get stats() { return JSON.parse(JSON.stringify(stats)); }, openCollection, closeCollection, get colOpen() { return colOpen; }, set hold(v) { testHold = !!v; last = performance.now(); acc = 0; }, enterEditor, exitEditor, get mode() { return mode; }, setMode, openModes, closeModes, get menuOpen() { return menuOpen; },
-  get gravity() { return { gx, gy, dir: gdir, flipT, turning: turnT >= 0, nextDir, flips, hold: flipHold, ceil: ceilY }; }, flipIn(s) { flipT = s; }, fill: () => fillFrac(), get zenCleared() { return zenCleared; }, get padOn() { return padOn; }, get padPlaying() { return !!pad; }, setPad, get dangerT() { return dangerT; }, contactsDbg() { const o = []; for (let k = 0; k < ccount; k++) { const C = cpool[k]; const ca = Math.cos(C.a.a), sa = Math.sin(C.a.a); o.push({ a: C.a.id, b: C.b ? C.b.id : null, nx: +C.nx.toFixed(3), ny: +C.ny.toFixed(3), px: +(C.a.x + C.ax * ca - C.ay * sa).toFixed(2), py: +(C.a.y + C.ax * sa + C.ay * ca).toFixed(2), dep: +C.dep.toFixed(2), lam: +C.lam.toFixed(3) }); } return o; }, physStats, haptic, get vibe() { return vibeOn; }, set vibe(v) { setVibe(v); }, canVibe, get finEnd() { return finEnd; }, get interaction() { return inter; }, set interactions(v) { interOn = v; if (!v) inter = null; }, interact(kind) { inter = pickInteraction(kind); return !!inter; },
+  get gravity() { return { gx, gy, dir: gdir, flipT, turning: turnT >= 0, nextDir, flips, hold: flipHold, ceil: ceilY }; }, flipIn(s) { flipT = s; }, fill: () => fillFrac(), get zenCleared() { return zenCleared; }, get padOn() { return padOn; }, get padPlaying() { return !!pad; }, setPad, get dangerT() { return dangerT; }, contactsDbg() { const o = []; for (let k = 0; k < ccount; k++) { const C = cpool[k]; const ca = Math.cos(C.a.a), sa = Math.sin(C.a.a); o.push({ a: C.a.id, b: C.b ? C.b.id : null, nx: +C.nx.toFixed(3), ny: +C.ny.toFixed(3), px: +(C.a.x + C.ax * ca - C.ay * sa).toFixed(2), py: +(C.a.y + C.ax * sa + C.ay * ca).toFixed(2), dep: +C.dep.toFixed(2), lam: +C.lam.toFixed(3) }); } return o; }, physStats, haptic, get vibe() { return vibeOn; }, set vibe(v) { setVibe(v); }, canVibe, get finEnd() { return finEnd; }, get interaction() { return inter; }, set interactions(v) { interOn = v; if (!v) inter = null; }, interact(kind) { inter = pickInteraction(kind); return !!inter; }, hfGeom, HF: { IN: HF_IN, HOLD: HF_HOLD, OUT: HF_OUT }, pickKind, slapDbg: { get log() { return slapLog; }, get pending() { return pendingRet; }, cd: slapCD, blocked: (a, b) => slapBlocked(a, b), tick(dt) { time += dt; updateInteraction(dt); } }, get time() { return time; },
   restart, pause: setPaused, shareText, closeness, get overT() { return overT; }, get overBot() { return overBot; }, get dangerBot() { return dangerBot; }, get runMerges() { return runMerges; }, TIERS, get world() { return { WW, WH, JL, JR, JT, JB, DANGER, DROP_Y, layOff }; },
 };
 })();
