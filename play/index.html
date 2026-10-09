@@ -79,6 +79,7 @@
   #colBtn.new::after{content:'';position:absolute;top:3px;right:3px;width:9px;height:9px;border-radius:50%;background:#ffd23f;box-shadow:0 0 10px #ffd23f;animation:newdot 1.1s ease-in-out infinite}
   @keyframes newdot{50%{transform:scale(1.5);opacity:.6}}
   .colHead{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 6px;gap:10px}
+  .wishPlaque{display:inline-block;margin-top:6px;padding:3px 10px;border-radius:999px;border:1px solid rgba(255,214,120,.45);background:rgba(255,214,120,.08);color:#ffe0a0;font-size:12px;font-weight:800;letter-spacing:1px}
   .colTitle{font-weight:900;letter-spacing:5px;font-size:18px;text-shadow:0 0 18px rgba(255,255,255,.45)}
   .colSub{font-size:11px;letter-spacing:1.5px;color:rgba(255,255,255,.55);margin-top:4px}
   #colGrid{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:14px;padding:10px 18px 26px;align-content:start}
@@ -161,7 +162,7 @@
 <body>
 <canvas id="bg"></canvas>
 <div id="collection" class="hidden" role="dialog" aria-label="Bot collection">
-  <div class="colHead"><div><div class="colTitle">BOT COLLECTION</div><div class="colSub" id="colSub"></div></div><button id="colClose" class="iconbtn" aria-label="Close collection">&#10005;</button></div>
+  <div class="colHead"><div><div class="colTitle">BOT COLLECTION</div><div class="colSub" id="colSub"></div><div id="wishPlaque" class="wishPlaque"></div></div><button id="colClose" class="iconbtn" aria-label="Close collection">&#10005;</button></div>
   <div id="colGrid"></div>
 </div>
 <canvas id="fx" style="position:fixed;inset:0;width:100%;height:100%;z-index:40;pointer-events:none;display:block"></canvas>
@@ -170,7 +171,7 @@
     <div class="title">GROK DRO<span id="secretP">P</span><small>MERGE THE BOTS</small></div>
     <div class="stat scoreStat"><span class="label">SCORE</span><span class="val" id="score">0</span><div id="comboMeter" aria-hidden="true"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" class="trk"/><circle cx="18" cy="18" r="15" class="arc" id="comboArc"/></svg><b id="comboTxt">x2</b></div></div>
     <div class="stat best"><span class="label">BEST</span><span class="val" id="best">0</span><span class="tag">UNRANKED</span></div>
-    <div class="next"><span class="label">NEXT &rsaquo;</span><canvas id="nextc" width="168" height="168"></canvas></div>
+    <div class="next"><span class="label">NEXT</span><canvas id="nextc" width="168" height="168"></canvas></div>
     <div class="btns">
       <button class="iconbtn" id="modeBtn" aria-label="Game modes" title="Game modes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M16.5 13.5v6M13.5 16.5h6"/></svg></button>
       <button class="iconbtn" id="pauseBtn" aria-label="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg></button>
@@ -239,12 +240,12 @@
 (() => {
 'use strict';
 // ================================================================ constants
-const WW = 420, WH = 700;                     // logical world size
-const JL = 12, JR = 408, JB = 688;           // jar inner bounds (walls extend above JT)
+let WW = 420; const WH = 700;                 // logical world size (WW = 500 on the wide desktop layout)
+const JL = 12, JB = 688; let JR = 408;        // JR = WW - 12           // jar inner bounds (walls extend above JT)
 let JT = 128, WALL_TOP = 18, DANGER = 146, DROP_Y = 66;   // top of jar / side-wall tops / game-over line / dropper y
 // tall portrait screens: the jar top (and dropper + danger line) sits LAY_COMPACT lower and the view crops the band above,
 // so the jar is shorter and fills the screen (less dead drop distance). Applied only at restart, never mid-game.
-const LAY_COMPACT = 50; let layOff = 0, wantOff = 0;
+const LAY_COMPACT = 50, WIDE_WW = 500; let layOff = 0, wantOff = 0, wide = false, wantWide = false, layHinted = false;
 const G = 1900, STEP = 1 / 120;
 const MAX_V = 1300, MAX_UP = 700;
 const BEST_KEY = 'grokDrop.best', MUTE_KEY = 'grokDrop.muted';
@@ -267,7 +268,7 @@ const TIERS = [
   { name: 'Hexa',   shape: 'hexagon',  r: 50,  c: '#8b5cf6', mouth: 'cat',    lid: 0.1,  brow: 0,    blushy: 0 },   // cheeky
   { name: 'Nimbus', shape: 'cloud',    r: 62,  c: '#e6edf7', mouth: 'sleepy', lid: 0.5,  brow: 0,    blushy: 1 },   // dozy
   { name: 'Bloom',  shape: 'flower',   r: 76,  c: '#2ee6b8', mouth: 'blush',  lid: 0,    brow: 0.4,  blushy: 1 },   // shy
-  { name: 'Orbit',  shape: 'orbit',    r: 92,  c: '#1b2a6b', mouth: 'smile',  lid: 0.35, brow: 0.2,  blushy: 0, orbit: true },   // dreamy stargazer / wise elder (replaced Ember; same tier slot / radius / stats index)
+  { name: 'Orbit',  shape: 'orbit',    r: 92,  c: '#245a86', mouth: 'smile',  lid: 0.35, brow: 0.2,  blushy: 0, orbit: true },   // dreamy stargazer / wise elder (replaced Ember; same tier slot / radius / stats index)
   { name: 'Grok',   shape: 'pebble',   r: 110, c: '#0b0b0d', grok: true, mouth: 'smug', lid: 0.2, brow: 0, blushy: 0 }, // cool
 ];
 const TOP = TIERS.length - 1;
@@ -448,7 +449,7 @@ for (const T of TIERS) {
   T.rim = T.grok ? 'rgba(255,255,255,.9)' : mix(T.c, '#000000', 0.45);
   T.eye = T.grok || T.shape === 'heart' || T.shape === 'hexagon' || T.shape === 'square' ? '#ffffff' : '#101114';
   T.e = EYES[T.shape];
-  if (T.orbit) { T.hi = '#2c3f86'; T.lo = '#0b1236'; T.rim = '#5f8ad8'; T.eye = '#e8f0ff'; }   // indigo -> navy, light rim lighting, pale eyes
+  if (T.orbit) { T.hi = '#4b8fc0'; T.lo = '#16305e'; T.rim = '#8fd2f0'; T.eye = '#f4fbff'; }   // teal-navy, clearly lighter than the sky; pale cyan rim glow   // indigo -> navy, light rim lighting, pale eyes
 }
 
 // ================================================================ DOM
@@ -576,7 +577,7 @@ function loadStats() {
   let o = null; try { o = JSON.parse(localStorage.getItem(STATS_KEY)); } catch (e) {}
   if (!o || typeof o !== 'object') o = {};
   for (const k of ['made', 'dropped', 'slapGiven', 'slapTaken']) { if (!Array.isArray(o[k])) o[k] = []; while (o[k].length < TIERS.length) o[k].push(0); o[k] = o[k].map(v => Math.max(0, v | 0)); }
-  o.singularities = Math.max(0, o.singularities | 0); return o;
+  o.singularities = Math.max(0, o.singularities | 0); o.wishes = Math.max(0, o.wishes | 0); return o;
 }
 let stats = loadStats();
 function saveStats() { store(STATS_KEY, JSON.stringify(stats)); }
@@ -639,7 +640,7 @@ function addScore(n) {
 // between convex parts, and outline vertices vs the jar's walls/floor/ceiling.
 const SUB = 3;                 // substeps per 1/120 s step  -> h = 1/360 s
 let CEIL = 2;                  // invisible ceiling y
-function applyLayout(off) { layOff = off; JT = 128 + off; WALL_TOP = 18 + off; DANGER = 146 + off; DROP_Y = 66 + off; FLIP_TOP = 22 + off; CEIL = 2 + off; }
+function applyLayout(off, wd = wide) { wide = wd; WW = wd ? WIDE_WW : 420; JR = WW - 12; layOff = off; JT = 128 + off; WALL_TOP = 18 + off; DANGER = 146 + off; DROP_Y = 66 + off; FLIP_TOP = 22 + off; CEIL = 2 + off; }
 const SLOP = 0.5;              // contact detection margin (world units)
 const MERGE_GAP = 0.6;         // same-tier bots merge when within this distance (i.e. touching)
 const MU_D = 0.9;  const REST = 0.25, BOUNCE_MIN = 140;  // bounce only on real impacts
@@ -648,7 +649,7 @@ const SLEEP_V = 10, SLEEP_W = 0.2, SLEEP_T = 0.3;  // settled bots fall asleep (
 const SPAWN_FX = 0.15, SPREAD_T = 0.35, SPREAD_CAP = 0.3, SPREAD_W = 0.25;   // merge spawn: visual pop time, push-out window, per-pass cap (u), new-bot mobility
 const FACE_COS = 0.9986, WALL_BAND = 0.5, MASS_RATIO = 2, POS_ITERS = 12, PAIR_CAP = 24;
 const PUSH_FREE = 0.0;           // overlap beyond this is resolved without injecting velocity
-let physPaused = false;        // editor: freeze physics
+let physPaused = false, runId = 0, escapes = 0, dangerOver = false;   // runId: stale game-over timers from an earlier run are ignored        // editor: freeze physics
 const cpool = []; let ccount = 0;
 function newContact() { let c = cpool[ccount]; if (!c) { c = {}; cpool[ccount] = c; } ccount++; return c; }
 
@@ -1034,11 +1035,18 @@ function step(dt) {
       dx /= d; dy /= d; let k = d; while (k < B.r * 1.4 && pointInBot(B, B.x + dx * k, B.y + dy * k)) k += 2;
       const mv = Math.min(3, k + A.r * 0.6 - d);   // gradual (<=3 u per step), velocity-free: no teleport
       A.x += dx * mv; A.px += dx * mv; A.y += dy * mv; A.py += dy * mv; A.vx *= 0.5; A.vy *= 0.5; wake(A); wake(B); updateWorld(A); break; } }
+  for (const b of bots) {   // containment: no body ever ends a step outside the jar (velocity-free; outward speed killed)
+    if (b.dead) continue; updateWorld(b);
+    const E = 1.5, cut = v => v > E ? v : 0;   // only real escapes: normal sub-unit contact slop is left to the solver
+    const dx = cut(JL - b.x0) - cut(b.x1 - JR), dy = cut(ceilY - b.y0) - cut(b.y1 - JB);
+    if (dx || dy) { b.x += dx; b.px += dx; b.y += dy; b.py += dy; if (dx * b.vx < 0) b.vx = 0; if (dy * b.vy < 0) b.vy = 0; updateWorld(b); escapes++; }
+  }
   let over = false;
   dangerBot = null;
   for (const b of bots) { updateWorld(b); if (mode === 'classic' && b.age > 1.2 && b.y0 < DANGER && Math.abs(b.vy) < 220) { over = true; if (!dangerBot || b.y0 < dangerBot.y0) dangerBot = b; } }
   if (mode === 'flip') over = turnT < 0 && flipHold <= 0 && fillFrac() > FILL_MAX;   // sealed jar: too full (paused while gravity swings + settles)
   if (mode === 'zen' && state === 'playing' && !finale) zenStep(dt);
+  dangerOver = over && state === 'playing' && !finale && mode !== 'zen';
   if (state === 'playing' && !finale && mode !== 'zen') {
     if (over) { const prev = dangerT; dangerT += dt; const bpm = k => Math.floor(k * (1.6 + k * 0.9)); if (bpm(prev) !== bpm(dangerT)) { sfx.heart(dangerT / 2.2); haptic('heart'); } }   // heartbeat speeds up as the countdown runs out
     else dangerT = Math.max(0, dangerT - dt * 2);
@@ -1264,7 +1272,7 @@ function drawFinale(c) {
   for (const L of F.labels) { const k = L.life / L.max; L.w = fxText(c, L.text, L.x, L.y - k * 10, 17, L.color, k > 0.7 ? (1 - k) / 0.3 : 1); L.h = 17; L.dy = k * 10; }
 }
 function drop() {
-  if (!canDrop()) { if (state === 'playing' && (dropCD > 0 || finale) && dropRoom(true)) dropQ = true; return false; }   // tap during cooldown: buffered (one), fires when ready
+  if (!canDrop()) { if (state === 'playing' && dropCD > 0 && !finale && dropRoom(true)) dropQ = true; return false; }   // tap during cooldown: buffered (one), fires when ready
   dropQ = false;
   const b = makeBot(curTier, clampAim(aimX), DROP_Y, 0); b.vy = 120; stat('dropped', b.t); react(b, 'happy', 0.7); b.pop = 0.5;
   bots.push(b);
@@ -1275,10 +1283,14 @@ function drop() {
 const SHARE_URL = 'https://auggiepeery.github.io/grok-drop/play/';
 const TIER_EMOJI = ['🔵', '🟢', '🔺', '🟦', '💗', '🟣', '☁️', '🌸', '🪐', '⚫'];
 // "how close": the two biggest bots on the board; growing the 2nd up to the biggest and merging them reaches the next tier
-function closeness(list) {   // merges still needed for the next tier: grow the two biggest bots (<= best tier) to it, then merge them
-  const top = topReached; if (top >= TOP) return { next: TOP, merges: 0 };
-  const ts = list.map(b => b.t).filter(t => t <= top).sort((a, b) => b - a), t1 = ts[0] ?? -1, t2 = ts[1] ?? -1;
-  return { next: top + 1, merges: (top - t1) + (top - t2) + 1 };
+function closeness(list, top = topReached) {   // merges still needed for the next tier: grow the two biggest bots (<= best tier) to it, then merge them
+  if (top >= TOP) return { next: TOP, merges: 0 };
+  // a tier-t bot is worth 2^t blips; tier `next` needs 2^next. Greedily use the biggest bots on the board, the rest must be
+  // built: merges = (pieces used + missing value in blips) - 1, a lower bound that is exact when only small drops remain.
+  const need = 2 ** (top + 1); let have = 0, pieces = 0;
+  for (const t of list.map(b => b.t).filter(t => t <= top).sort((a, b) => b - a)) if (have + 2 ** t <= need) { have += 2 ** t; pieces++; }
+  const two = list.filter(b => b.t === top).length >= 2;
+  return { next: top + 1, merges: two ? 1 : null, value: have / need, pieces };
 }
 function shareText(info = overInfo || { score, best, top: topReached, merges: runMerges, mode }) {
   const row = TIERS.map((T, i) => i <= info.top ? TIER_EMOJI[i] : '▫️').join('');
@@ -1302,18 +1314,18 @@ function gameOver() {
   const cl = closeness(bots);
   overInfo = { score, best, top: topReached, merges: runMerges, mode, next: cl.next, need: cl.merges };
   const list = bots.slice().sort((a, b) => a.y - b.y), per = Math.min(40, 600 / Math.max(1, list.length));   // all pops within 0.6 s
-  const F = OVER_FREEZE * 1000;
+  const F = OVER_FREEZE * 1000, rid = runId;
   list.forEach((b, i) => setTimeout(() => {
-    if (state !== 'over' || b.dead) return;
+    if (rid !== runId || state !== 'over' || b.dead) return;
     b.dead = true; burst(b.x, b.y, TIERS[b.t].c, 8, 200, 3); bots = bots.filter(o => !o.dead); sfx.merge(b.t, 1);
   }, F + i * per));
   setTimeout(() => {
-    if (state !== 'over') return;
-    $('finalScore').textContent = score; $('finalBest').textContent = best; $('overMode').textContent = MODES[mode].name.toUpperCase();
+    if (rid !== runId || state !== 'over') return;
+    $('finalScore').textContent = score; $('finalBest').textContent = best; $('overMode').textContent = (tainted ? 'EDITOR RUN · ' : '') + MODES[mode].name.toUpperCase();
     $('newBest').textContent = isBest ? '★ NEW BEST ★' : (tainted ? 'EDITOR RUN · BEST NOT SAVED' : '');
     $('overTop').textContent = 'Biggest bot: ' + TIERS[topReached].name;
     $('overMerges').textContent = 'Merges: ' + runMerges;
-    $('overNext').textContent = topReached >= TOP ? 'GROK reached!' : cl.merges + ' merge' + (cl.merges > 1 ? 's' : '') + ' from ' + TIERS[cl.next].name + '!';
+    $('overNext').textContent = topReached >= TOP ? 'GROK reached!' : topReached < 3 ? '' : cl.merges === 1 ? 'One merge from ' + TIERS[cl.next].name + '!' : 'Next up: ' + TIERS[cl.next].name;
     const oc = $('overBot').getContext('2d'); oc.clearRect(0, 0, 180, 180);
     drawBot(oc, topReached, 90, 92, 62, { a: 0, happy: 1 });
     drawTierRow($('overRow'), topReached);
@@ -1321,11 +1333,11 @@ function gameOver() {
   }, F + Math.min(list.length * per, 600) + 200);   // card <= 0.8 s after the freeze
 }
 function restart() {
-  pendingRet = null; slapCD.clear(); slapLog = [];
+  pendingRet = null; slapCD.clear(); slapLog = []; runId++;
   bots = []; particles = []; floats = []; finale = null; finEnd = null; interT = 3; inter = null;
   score = 0; dangerT = 0; dropQ = false; runMerges = 0; overT = -1; overBot = dangerBot = null; overInfo = null; combo = 0; comboT = 9; shake = 0; flash = 0; aiming = false; dropCD = 0.2; topReached = 0;
   gx = 0; gy = 1; gdir = 0; gTo = 0; turnT = -1; flipT = FLIP_EVERY; nextDir = -1; flipHold = 0; flips = 0; tilt = 0; tiltKick = 0; zenT = 0; zenCleared = 0;
-  if (wantOff !== layOff) { applyLayout(wantOff); resize(); }
+  if (layoutPending()) { applyLayout(wantOff, wantWide); resize(); } layHinted = false;
   ceilY = mode === 'flip' ? FLIP_TOP : CEIL;
   try { best = +(localStorage.getItem(bestKey()) || 0) || 0; } catch (e) { best = 0; }
   applyMode();
@@ -1337,6 +1349,7 @@ function restart() {
   state = 'playing'; drawNext(); drawLadder();
 }
 function setPaused(p) {
+  if (p && state === 'playing' && layoutPending() && layoutFits()) { applyLayout(wantOff, wantWide); setTimeout(resize, 0); }
   if (p && state === 'playing') { state = 'paused'; aiming = false; $('pauseScore').textContent = score; pausedEl.classList.remove('hidden'); }
   else if (!p && state === 'paused') { state = 'playing'; pausedEl.classList.add('hidden'); last = performance.now(); acc = 0; }
 }
@@ -1393,7 +1406,7 @@ function editorTap(p) {
   }
   const T = TIERS[edTier], r = T.r;
   const x = Math.max(JL - T.ux0 * r + 0.5, Math.min(JR - T.ux1 * r - 0.5, p.x));
-  const y = Math.max(CEIL - T.uy0 * r + 0.5, Math.min(JB - T.uy1 * r - 0.5, p.y));
+  const y = Math.max(ceilY - T.uy0 * r + 0.5, Math.min(JB - T.uy1 * r - 0.5, p.y));
   const b = makeBot(edTier, x, y, 0); b.landed = true; b.age = 0; bots.push(b); wakeAll();
   ring(x, y, r * 1.2, T.grok ? '#ffffff' : T.c); sfx.drop();
   if (edTier > topReached) { topReached = edTier; drawLadder(); }
@@ -1405,6 +1418,7 @@ function toWorld(e) { const rect = canvas.getBoundingClientRect(); return { x: (
 canvas.addEventListener('pointerdown', e => {
   e.preventDefault(); ensureAudio();
   if (modalOpen) return;
+  if (state === 'playing' && hitMeteor(e.clientX, e.clientY, e.pointerType === 'touch')) { aiming = false; return; }   // wish: tap consumed
   if (state === 'editor') { editorTap(toWorld(e)); return; }
   if (state !== 'playing') return;
   try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
@@ -1467,9 +1481,9 @@ document.addEventListener('dblclick', e => e.preventDefault());
 // Orbit's ring: world-fixed tilt (does not spin with the body), decorative only (never collides). k = drawing scale (r in the
 // unscaled frame, 1 inside the unit frame). front=false draws the far half (behind the body), true the near half.
 function drawOrbitRing(c, k, o, front) {
-  const gl = Math.max(0, o.glint || 0), cy = 0.32 * k, rx = 1.12 * k, ry = 0.2 * k, tilt = -0.25;
+  const gl = Math.max(0, o.glint || 0), cy = 0.3 * k, rx = 1.03 * k, ry = 0.19 * k, tilt = -0.22;   // overhangs the silhouette by <= ~5%
   c.save(); c.rotate(tilt); c.lineCap = 'round';
-  c.strokeStyle = `rgba(255,214,140,${0.55 + 0.4 * gl})`; c.shadowColor = `rgba(255,200,120,${0.8})`; c.shadowBlur = 6 + 14 * gl; c.lineWidth = 0.045 * k;
+  c.strokeStyle = `rgba(255,232,170,${0.85 + 0.15 * gl})`; c.shadowColor = 'rgba(255,214,130,.95)'; c.shadowBlur = 8 + 14 * gl; c.lineWidth = 0.05 * k;
   c.beginPath(); c.ellipse(0, cy, rx, ry, 0, front ? 0 : Math.PI, front ? Math.PI : TAU); c.stroke();
   c.strokeStyle = `rgba(150,230,255,${0.25 + 0.3 * gl})`; c.lineWidth = 0.018 * k; c.beginPath(); c.ellipse(0, cy, rx * 0.93, ry * 0.88, 0, front ? 0 : Math.PI, front ? Math.PI : TAU); c.stroke();
   if (gl > 0.02 && front) { const ph = (1 - gl) * Math.PI; c.fillStyle = `rgba(255,255,255,${gl})`; c.shadowColor = '#fff'; c.shadowBlur = 12; c.beginPath(); c.arc(Math.cos(ph) * rx, cy + Math.sin(ph) * ry, 0.035 * k, 0, TAU); c.fill(); }
@@ -1510,6 +1524,7 @@ function drawBot(c, t, x, y, r, o = {}) {
   // meet edge-to-edge (a centred stroke + Grok's outer shadow glow used to stick ~1-1.5u past the collider)
   c.save(); c.clip(T.path);
   if (T.grok) { c.shadowColor = 'rgba(255,255,255,.9)'; c.shadowBlur = 10; }
+  if (T.orbit) { c.shadowColor = 'rgba(160,235,255,.9)'; c.shadowBlur = 8; }
   c.lineWidth = 2 * (T.grok ? 2.2 : 2.4) / r; c.strokeStyle = T.rim; c.stroke(T.path);
   c.restore(); c.shadowBlur = 0;
   if (T.orbit) { c.save(); c.clip(T.path); drawOrbitSurface(c, a, o.t || 0); c.restore();
@@ -1708,26 +1723,45 @@ function drawShooting(dt, w, h) {
     bctx.fillStyle = `rgba(${p.tint},${Math.max(0, Math.min(1, p.life * 1.6))})`; bctx.fillRect(p.x - 0.8, p.y - 0.8, 1.6, 1.6);
   }
 }
-// wish easter egg: tap a meteor on the background (outside the game canvas / buttons, so it never interferes with dropping)
-document.addEventListener('pointerdown', e => {
-  if (e.target.closest && e.target.closest('canvas#game, button, .overlay, #collection, #hud, input, a')) return;
+// wish easter egg: meteors live on the full-window background canvas (client px). Hit-tested FIRST by the game canvas's
+// pointerdown (a hit consumes the tap: no aim, no drop) and by a document handler for taps outside the game canvas.
+function hitMeteor(cx, cy, touch) {
+  const rad = touch ? 44 : 40;
   for (const m of SH_POOL) {
     if (!m.on || m.hole) continue;
     const tx = m.x - m.vx * m.len, ty = m.y - m.vy * m.len, dx = tx - m.x, dy = ty - m.y, l = dx * dx + dy * dy || 1;
-    const t = Math.max(0, Math.min(1, ((e.clientX - m.x) * dx + (e.clientY - m.y) * dy) / l)), d = Math.hypot(e.clientX - m.x - dx * t, e.clientY - m.y - dy * t);
-    if (d < 28) { m.life = m.max; shWish++; for (let i = 0; i < 14; i++) { const p = SPARKS.find(q => q.life <= 0); if (!p) break; const a = Math.random() * TAU, v = 40 + Math.random() * 120; Object.assign(p, { x: e.clientX, y: e.clientY, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6 + Math.random() * 0.6, tint: '255,214,140' }); }
-      ensureAudio(); [880, 1175, 1568].forEach((f, j) => tone(f, f * 1.01, 0.18, 'sine', 0.05, j * 0.06)); if (shWish === 1) toast('MAKE A WISH ✨'); return; }
+    const t = Math.max(0, Math.min(1, ((cx - m.x) * dx + (cy - m.y) * dy) / l)), d = Math.hypot(cx - m.x - dx * t, cy - m.y - dy * t);
+    if (d < rad) { catchWish(m, cx, cy); return true; }
   }
+  return false;
+}
+function catchWish(m, cx, cy) {
+  m.life = m.max; shWish++; stats.wishes = (stats.wishes | 0) + 1; saveStats();
+  for (let i = 0; i < 22; i++) { const p = SPARKS.find(q => q.life <= 0); if (!p) break; const a = Math.random() * TAU, v = 40 + Math.random() * 150; Object.assign(p, { x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6 + Math.random() * 0.7, tint: i % 3 ? '255,214,120' : '190,230,255' }); }
+  ensureAudio(); [880, 1175, 1568, 2093].forEach((f, j) => tone(f, f * 1.01, 0.2, 'sine', 0.05, j * 0.06)); haptic('drop');
+  toast(stats.wishes === 1 ? 'MAKE A WISH ✨' : 'WISH CAUGHT ✨ ×' + stats.wishes);
+  if (colOpen) buildCollection();
+}
+document.addEventListener('pointerdown', e => {
+  if (e.target.closest && e.target.closest('canvas#game, button, .overlay, #collection, #hud, input, a')) return;
+  hitMeteor(e.clientX, e.clientY, e.pointerType === 'touch');
 }, true);
 
 // ================================================================ rendering: jar + game
+function layoutPending() { return wantOff !== layOff || wantWide !== wide; }
+function layoutFits() {   // would every bot sit inside the new jar exactly where it is? (then switching moves nothing)
+  const jr = (wantWide ? WIDE_WW : 420) - 12, top = 2 + wantOff;
+  return bots.every(b => { updateWorld(b); return b.x1 <= jr - 0.5 && b.y0 >= top; });
+}
 function resize() {
   fxC.width = Math.max(1, Math.round(innerWidth * Math.min(devicePixelRatio || 1, 3))); fxC.height = Math.max(1, Math.round(innerHeight * Math.min(devicePixelRatio || 1, 3))); fxDirty = true;
   const rect = canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 3);
   view.dpr = dpr; view.w = rect.width; view.h = rect.height;
   canvas.width = Math.max(1, Math.round(rect.width * dpr)); canvas.height = Math.max(1, Math.round(rect.height * dpr));
   wantOff = rect.height / Math.max(1, rect.width) >= 1.45 ? LAY_COMPACT : 0;
-  if (wantOff !== layOff && (!bots.length || state === 'over')) applyLayout(wantOff);
+  wantWide = innerWidth >= 760 && innerWidth >= innerHeight;   // same test as the desktop CSS media query
+  if (layoutPending()) { if (!bots.length || state === 'over' || state === 'paused' && layoutFits()) applyLayout(wantOff, wantWide);
+    else if (!layHinted && state === 'playing') { layHinted = true; toastQueued('NEW LAYOUT AT NEXT PAUSE'); } }
   const VH = WH - layOff;   // visible world band [layOff, WH]
   view.scale = Math.min(rect.width / WW, rect.height / VH);
   view.ox = (rect.width - WW * view.scale) / 2; view.oy = (rect.height - VH * view.scale) / 2 - layOff * view.scale;
@@ -1803,7 +1837,6 @@ function drawFlipHud(c) {
     c.save(); c.fillStyle = '#fff'; c.globalAlpha = 0.9; c.shadowColor = '#ffb340'; c.shadowBlur = 20; c.font = `900 ${Math.round(70 + 30 * ph)}px system-ui,sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(n, mx, my);
     c.shadowBlur = 0; c.font = '800 14px system-ui,sans-serif'; c.fillText('GRAVITY ' + GNAMES[nextDir], mx, my + 62); c.restore();
   }
-  if (dangerT > 0.05) { const d = Math.min(1, dangerT / 2.2); c.fillStyle = `rgba(255,90,110,${0.5 + d * 0.5})`; c.font = '800 14px system-ui,sans-serif'; c.textAlign = 'center'; c.fillText('JAR FULL ' + Math.max(0, 2.2 - dangerT).toFixed(1) + 's', WW / 2, ceilY + 52); }
 }
 // screen tilt: wobble while a flip is coming, swing with the gravity, settle back
 const stageEl = document.getElementById('stage');
@@ -1827,6 +1860,13 @@ function updateComboMeter() {
   if (el.classList.contains('on') !== on) el.classList.toggle('on', on);
   if (on) { $('comboTxt').textContent = 'x' + combo; $('comboArc').style.strokeDashoffset = (94.25 * Math.min(1, comboT / COMBO_WIN)).toFixed(2); }
 }
+function visWorld() { return { x0: -view.ox / view.scale, x1: (view.w - view.ox) / view.scale, y0: -view.oy / view.scale, y1: (view.h - view.oy) / view.scale }; }
+function ringGeom(B, beat = 0) {   // countdown ring kept fully inside the visible stage: shrink it, then shift it, near an edge / the top
+  const V = visWorld(), m = 6; let R = B.r + 8 + 3 * beat;
+  R = Math.max(14, Math.min(R, (V.x1 - V.x0) / 2 - m, (V.y1 - V.y0) / 2 - m));
+  const x = Math.max(V.x0 + R + m, Math.min(V.x1 - R - m, B.x)), y = Math.max(V.y0 + R + m, Math.min(V.y1 - R - m, B.y));
+  return { x, y, R };
+}
 function drawDanger(c) {
   const d = Math.min(1, dangerT / 2.2), near = bots.some(b => b.age > 0.6 && b.y - b.r < DANGER + 40);
   const beat = Math.pow(Math.max(0, Math.sin(time * (6 + d * 8))), 6);
@@ -1843,11 +1883,10 @@ function drawDanger(c) {
   c.beginPath(); c.moveTo(JL + 2, DANGER); c.lineTo(JR - 2, DANGER); c.stroke(); c.restore();
   const B = state === 'over' ? overBot : dangerBot;
   if (B && (d > 0.02 || state === 'over')) {   // countdown ring on the offending bot (shrinks to nothing at game over)
-    const left = state === 'over' ? 0 : Math.max(0, 1 - dangerT / 2.2), R = B.r + 8 + 3 * beat;
-    c.save(); c.lineCap = 'round'; c.strokeStyle = 'rgba(255,255,255,.15)'; c.lineWidth = 5; c.beginPath(); c.arc(B.x, B.y, R, 0, TAU); c.stroke();
-    c.strokeStyle = '#ff4a5e'; c.shadowColor = '#ff2a40'; c.shadowBlur = 10; c.beginPath(); c.arc(B.x, B.y, R, -Math.PI / 2, -Math.PI / 2 + TAU * left); c.stroke(); c.restore();
+    const left = state === 'over' ? 0 : Math.max(0, 1 - dangerT / 2.2), rg = ringGeom(B, beat), R = rg.R;
+    c.save(); c.lineCap = 'round'; c.strokeStyle = 'rgba(255,255,255,.15)'; c.lineWidth = 5; c.beginPath(); c.arc(rg.x, rg.y, R, 0, TAU); c.stroke();
+    c.strokeStyle = '#ff4a5e'; c.shadowColor = '#ff2a40'; c.shadowBlur = 10; c.beginPath(); c.arc(rg.x, rg.y, R, -Math.PI / 2, -Math.PI / 2 + TAU * left); c.stroke(); c.restore();
   }
-  if (d > 0.05 && state !== 'over') { c.fillStyle = `rgba(255,90,110,${0.5 + d * 0.5})`; c.font = '800 14px system-ui,sans-serif'; c.textAlign = 'center'; c.fillText('OVERFLOW ' + Math.max(0, 2.2 - dangerT).toFixed(1) + 's', WW / 2, DANGER + 20); }
 }
 function drawOverHighlight(c) {   // frozen jar: pulse the bot that crossed the line
   const B = overBot; if (!B || B.dead || overT < 0) return;
@@ -1928,6 +1967,11 @@ function render(dt) {
   }
   drawInteraction(c);
   drawJarFront(c);
+  if (dangerOver && state === 'playing' && dangerT > 0.05 && mode !== 'zen') {   // warning text on top of everything in the jar: whole seconds 3, 2, 1
+    const d = Math.min(1, dangerT / 2.2), n = Math.max(1, Math.ceil(2.2 - dangerT)), msg = (mode === 'flip' ? 'JAR FULL ' : 'OVERFLOW ') + n;
+    c.save(); c.font = '900 18px system-ui,sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 5; c.strokeStyle = 'rgba(0,0,0,.8)';
+    const ty = mode === 'flip' ? ceilY + 52 : DANGER + 22; c.strokeText(msg, WW / 2, ty); c.fillStyle = `rgba(255,${110 - 40 * d},${120 - 40 * d},1)`; c.shadowColor = '#ff2a40'; c.shadowBlur = 10; c.fillText(msg, WW / 2, ty); c.restore();
+  }
   if (state === 'editor' && hoverW && edTool === 'place') {
     const T = TIERS[edTier]; c.save(); c.translate(hoverW.x, hoverW.y); c.scale(T.r, T.r); c.setLineDash([4 / T.r, 3 / T.r]);
     c.fillStyle = rgba(T.grok ? '#ffffff' : T.c, 0.12); c.fill(T.path); c.strokeStyle = 'rgba(255,255,255,.7)'; c.lineWidth = 1.5 / T.r; c.stroke(T.path); c.restore();
@@ -1948,7 +1992,7 @@ function render(dt) {
   // floating text
   c.textAlign = 'center'; c.textBaseline = 'middle';
   for (const f of floats) {
-    const k = f.life / f.max, pop = k < 0.15 ? 0.6 + k / 0.15 * 0.5 : 1.1 - Math.min(0.1, (k - 0.15));
+    const k = f.life / f.max, pop = f.pop ? (f.life < 0.09 ? 0.3 + 1.1 * f.life / 0.09 : 1.4 - 0.4 * Math.min(1, (f.life - 0.09) / 0.12)) : k < 0.15 ? 0.6 + k / 0.15 * 0.5 : 1.1 - Math.min(0.1, (k - 0.15));   // slap: quick scale-in punch
     c.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
     c.font = `900 ${f.size * pop}px system-ui,-apple-system,sans-serif`;
     c.lineWidth = 4; c.strokeStyle = 'rgba(0,0,0,.75)'; c.strokeText(f.text, f.x, f.y - k * 40);
@@ -1975,13 +2019,13 @@ function drawLadder() {
     const seen = i <= Math.max(topReached, 4);
     if (vertical) {
       const rowH = rect.height / N, cy = rowH * (i + 0.5), r = Math.min(rowH * 0.36, 9 + i * 1.4);
-      drawBot(c, i, 30, cy, r, { a: 0, alpha: seen ? 1 : 0.25, glow: i === topReached && i > 0 });
+      drawBot(c, i, 30, cy, r, { a: 0, alpha: seen ? 1 : 0.42, glow: i === topReached && i > 0 });
       c.globalAlpha = seen ? 0.95 : 0.35; c.fillStyle = '#fff'; c.font = '700 13px system-ui,sans-serif'; c.textBaseline = 'middle'; c.textAlign = 'left';
       c.fillText(TIERS[i].name, 58, cy - 6);
       c.globalAlpha = seen ? 0.45 : 0.2; c.font = '600 10px system-ui,sans-serif'; c.fillText(TIERS[i].shape.toUpperCase(), 58, cy + 8); c.globalAlpha = 1;
     } else {
       const colW = rect.width / N, cx = colW * (i + 0.5), r = Math.min(colW * 0.4, rect.height * 0.42) * (0.62 + i * 0.04);
-      drawBot(c, i, cx, rect.height / 2, r, { a: 0, alpha: seen ? 1 : 0.25, glow: i === topReached && i > 0 });
+      drawBot(c, i, cx, rect.height / 2, r, { a: 0, alpha: seen ? 1 : 0.42, glow: i === topReached && i > 0 });
     }
   }
 }
@@ -2036,7 +2080,7 @@ function updateInteraction(dt) {
       const dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy) || 1;
       const px = A.x + dx / d * (A.r * 0.9), py = A.y + dy / d * (A.r * 0.9) - A.r * 0.2;
       const pw = I.ret ? 1.35 : 1;
-      burst(px, py, '#ffffff', 8, 140, 2); ring(px, py, 10 * pw, '#ffffff', 0.3); floatText(px, py - 14, I.ret ? 'SLAP!' : 'slap!', I.ret ? 16 : 13, '#ffffff', 0.7);
+      burst(px, py, '#ffffff', 8, 140, 2); ring(px, py, 10 * pw, '#ffffff', 0.3); floatText(px, py - 16, I.ret ? 'SLAP!' : 'slap!', I.ret ? 24 : 20, '#ffffff', 0.8).pop = true;
       slapLog.push({ a: A.id, b: B.id, t: time, ret: !!I.ret });
       if (I.ret) { react(B, 'shock', 1.4); B.anger = 0; slapCD.set(pairKey(A, B), time + 8 + Math.random() * 4); }
       else { const chill = TIERS[B.t].orbit; B.anger = chill ? 1.3 + Math.random() * 0.4 : 2.2 + Math.random() * 0.8; B.angryAt = A.id; B.pout = chill || Math.random() < 0.35; B.huff = 0.3;   // Orbit: only mildly offended
@@ -2234,6 +2278,7 @@ function buildCollection() {
     colGrid.appendChild(d); colCards.push({ el: d, cv, ctx: cv.getContext('2d'), seen, react: null });
   });
   $('colSub').textContent = `${found} / ${TIERS.length} DISCOVERED` + (stats.singularities ? ` · ${stats.singularities} SINGULARIT${stats.singularities === 1 ? 'Y' : 'IES'}` : '');
+  $('wishPlaque').innerHTML = '🌠 WISHES CAUGHT: <b>' + (stats.wishes | 0) + '</b>';
   sizeCollection();
 }
 function sizeCollection() { const dpr = Math.min(devicePixelRatio || 1, 2); for (const c of colCards) { const w = c.cv.clientWidth || 160; c.cv.width = Math.round(w * dpr); c.cv.height = Math.round(w * dpr); c.dpr = dpr; } }
@@ -2302,7 +2347,7 @@ function update(dt) {
   time += dt;
   if (dropCD > 0) dropCD -= dt; else readyAnim += dt * 5;
   if (dropQ && dropCD <= 0 && !finale) { if (state === 'playing') drop(); else if (state !== 'paused') dropQ = false; }
-  comboT += dt; updateComboMeter(); if (nudge.t > 0) nudge.t = Math.max(0, nudge.t - dt);
+  if (state === 'playing') comboT += dt; updateComboMeter(); if (nudge.t > 0) nudge.t = Math.max(0, nudge.t - dt);
   shake *= Math.pow(0.0015, dt); if (shake < 0.1) shake = 0;
   if (mode === 'zen') { shake = Math.min(shake, 2.5); flash = Math.min(flash, 0.25); }
   updateTilt(dt);
@@ -2374,7 +2419,8 @@ window.GrokDrop = {
   get current() { return curTier; }, set current(t) { curTier = t; drawNext(); },
   get finale() { return finale; }, get stats() { return JSON.parse(JSON.stringify(stats)); }, openCollection, closeCollection, get colOpen() { return colOpen; }, set hold(v) { testHold = !!v; last = performance.now(); acc = 0; }, enterEditor, exitEditor, get mode() { return mode; }, setMode, openModes, closeModes, get menuOpen() { return menuOpen; },
   get gravity() { return { gx, gy, dir: gdir, flipT, turning: turnT >= 0, nextDir, flips, hold: flipHold, ceil: ceilY }; }, flipIn(s) { flipT = s; }, fill: () => fillFrac(), get zenCleared() { return zenCleared; }, get padOn() { return padOn; }, get padPlaying() { return !!pad; }, setPad, get dangerT() { return dangerT; }, contactsDbg() { const o = []; for (let k = 0; k < ccount; k++) { const C = cpool[k]; const ca = Math.cos(C.a.a), sa = Math.sin(C.a.a); o.push({ a: C.a.id, b: C.b ? C.b.id : null, nx: +C.nx.toFixed(3), ny: +C.ny.toFixed(3), px: +(C.a.x + C.ax * ca - C.ay * sa).toFixed(2), py: +(C.a.y + C.ax * sa + C.ay * ca).toFixed(2), dep: +C.dep.toFixed(2), lam: +C.lam.toFixed(3) }); } return o; }, physStats, haptic, get vibe() { return vibeOn; }, set vibe(v) { setVibe(v); }, canVibe, get finEnd() { return finEnd; }, get interaction() { return inter; }, set interactions(v) { interOn = v; if (!v) inter = null; }, interact(kind) { inter = pickInteraction(kind); return !!inter; }, hfGeom, HF: { IN: HF_IN, HOLD: HF_HOLD, OUT: HF_OUT }, pickKind, slapDbg: { get log() { return slapLog; }, get pending() { return pendingRet; }, cd: slapCD, blocked: (a, b) => slapBlocked(a, b), tick(dt) { time += dt; updateInteraction(dt); } }, get time() { return time; },
-  restart, pause: setPaused, shareText, closeness, get overT() { return overT; }, get overBot() { return overBot; }, get dangerBot() { return dangerBot; }, get runMerges() { return runMerges; }, TIERS, get world() { return { WW, WH, JL, JR, JT, JB, DANGER, DROP_Y, layOff }; },
+  get escapes() { return escapes; }, get runId() { return runId; }, get dangerOver() { return dangerOver; }, hitMeteor, ringGeom, visWorld, layoutFits, get layoutPending() { return layoutPending(); },
+  restart, pause: setPaused, shareText, closeness, get overT() { return overT; }, get overBot() { return overBot; }, get dangerBot() { return dangerBot; }, get runMerges() { return runMerges; }, TIERS, get world() { return { wide, WW, WH, JL, JR, JT, JB, DANGER, DROP_Y, layOff }; },
 };
 })();
 </script>
