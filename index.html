@@ -465,7 +465,9 @@ const SUB = 3;                 // substeps per 1/120 s step  -> h = 1/360 s
 const CEIL = 2;                // invisible ceiling y
 const SLOP = 0.5;              // contact detection margin (world units)
 const MERGE_GAP = 0.6;         // same-tier bots merge when within this distance (i.e. touching)
-const MU_D = 0.6;               // friction (velocity level; positional static friction ratcheted bots up walls)
+const MU_D = 0.9;  const REST = 0.16, BOUNCE_MIN = 140;  // bounce only on real impacts
+const SLEEP_V = 10, SLEEP_W = 0.2, SLEEP_T = 0.3;  // settled bots fall asleep (frozen) until disturbed
+//               // friction (velocity level; positional static friction ratcheted bots up walls)
 const PUSH_FREE = 1.0;         // overlap beyond this is resolved without injecting velocity
 let physPaused = false;        // editor: freeze physics
 const cpool = []; let ccount = 0;
@@ -475,7 +477,7 @@ function initBody(b) {
   const T = TIERS[b.t];
   b.wv = new Float64Array(T.N * 2);
   b.pn = T.parts.map(p => ({ nx: new Float64Array(p.nx.length), ny: new Float64Array(p.ny.length), cx: 0, cy: 0 }));
-  b.im = 1 / (T.mass); b.iI = 1 / (T.inertia);
+  b.im = b.im0 = 1 / (T.mass); b.iI = b.iI0 = 1 / (T.inertia); b.sleep = false; b.st = 0; b.nc = 0; b.ovx = b.ovy = b.ow = 0; b.ct = 0; b.ax = b.x; b.ay = b.y; b.aa = b.a; b.mv = 0; b.sx0 = b.x; b.sy0 = b.y;
   b.pa = b.a; b.x0 = b.x1 = b.y0 = b.y1 = 0;
   updateWorld(b);
 }
@@ -568,7 +570,7 @@ function partContacts(A, ja, B, jb, merges) {
 }
 function canMerge(A, B) { return (state === 'playing' || state === 'editor') && A.mcd <= 0 && B.mcd <= 0 && !A.dead && !B.dead; }
 function addContact(A, B, pax, pay, pbx, pby, nx, ny) {
-  const C = newContact(); C.a = A; C.b = B; C.nx = nx; C.ny = ny; C.lam = 0;
+  const C = newContact(); C.a = A; C.b = B; C.nx = nx; C.ny = ny; C.lam = 0; A.nc++; if (B) B.nc++;
   const ca = Math.cos(A.a), sa = Math.sin(A.a), dx = pax - A.x, dy = pay - A.y;
   C.ax = dx * ca + dy * sa; C.ay = -dx * sa + dy * ca; // body-local (unrotated) offset
   if (B) { const cb = Math.cos(B.a), sb = Math.sin(B.a), ex = pbx - B.x, ey = pby - B.y; C.bx = ex * cb + ey * sb; C.by = -ex * sb + ey * cb; }
@@ -581,7 +583,8 @@ function collide(merges) {
     const A = bots[i]; if (A.dead) continue;
     // jar walls / floor / ceiling against outline vertices
     const W = A.wv, N = TIERS[A.t].N;
-    if (A.x0 < JL + SLOP || A.x1 > JR - SLOP || A.y1 > JB - SLOP || A.y0 < CEIL + SLOP) {
+    if (A.sleep) A.nc += (A.x0 < JL + SLOP || A.x1 > JR - SLOP || A.y1 > JB - SLOP) ? 1 : 0;
+    else if (A.x0 < JL + SLOP || A.x1 > JR - SLOP || A.y1 > JB - SLOP || A.y0 < CEIL + SLOP) {
       for (let k = 0; k < N; k++) {
         const x = W[2 * k], y = W[2 * k + 1];
         if (x < JL + SLOP) addContact(A, null, x, y, JL, y, -1, 0);
@@ -593,6 +596,8 @@ function collide(merges) {
     for (let j = i + 1; j < n; j++) {
       const B = bots[j]; if (B.dead) continue;
       if (A.x0 > B.x1 + SLOP || B.x0 > A.x1 + SLOP || A.y0 > B.y1 + SLOP || B.y0 > A.y1 + SLOP) continue;
+      if (A.sleep && B.sleep) { A.nc++; B.nc++; continue; }
+      if (A.sleep !== B.sleep) { const m = A.sleep ? B : A; if (m.mv > 60) { wake(A); wake(B); } }
       const TA = TIERS[A.t], TB = TIERS[B.t];
       for (let pa = 0; pa < TA.parts.length && !A.dead; pa++) {
         const qa = A.pn[pa];
@@ -616,10 +621,10 @@ function solvePositions() {
     if (B) { cb = Math.cos(B.a); sb = Math.sin(B.a); rbx = C.bx * cb - C.by * sb; rby = C.bx * sb + C.by * cb; pbx = B.x + rbx; pby = B.y + rby; }
     const nx = C.nx, ny = C.ny;
     const d = (A.x + rax - pbx) * nx + (A.y + ray - pby) * ny;
-    if (d <= 0) { C.lam = 0; continue; }
+    if (d <= 0) continue;   // keep lam from the first pass (velocity pass needs it)
     const cra = rax * ny - ray * nx, crb = rbx * ny - rby * nx;
     const wa = A.im + A.iI * cra * cra, wb = B ? B.im + B.iI * crb * crb : 0;
-    const dl = d / (wa + wb); C.lam = dl;
+    const dl = d / (wa + wb); C.lam += dl;
     const f = d > PUSH_FREE ? (d - PUSH_FREE) / d : 0;
     applyPos(A, -dl * nx, -dl * ny, rax, ray, f);
     if (B) applyPos(B, dl * nx, dl * ny, rbx, rby, f);
@@ -639,6 +644,9 @@ function solveVelocities(h) {
     if (B) { const cb = Math.cos(B.a), sb = Math.sin(B.a); rbx = C.bx * cb - C.by * sb; rby = C.bx * sb + C.by * cb; vbx = B.vx - B.w * rby; vby = B.vy + B.w * rbx; }
     const rvx = A.vx - A.w * ray - vbx, rvy = A.vy + A.w * rax - vby, nx = C.nx, ny = C.ny;
     const vn = rvx * nx + rvy * ny;
+    let pvx = A.ovx - A.ow * ray, pvy = A.ovy + A.ow * rax;
+    if (B) { pvx -= B.ovx - B.ow * rby; pvy -= B.ovy + B.ow * rbx; }
+    const vnPre = pvx * nx + pvy * ny, bounce = vnPre > BOUNCE_MIN && (A.air || (B && B.air)) ? REST * vnPre : 0;  // only fresh impacts bounce
     let tx = rvx - vn * nx, ty = rvy - vn * ny; const vt = Math.hypot(tx, ty);
     // dynamic friction
     if (vt > 1e-6) {
@@ -650,25 +658,32 @@ function solveVelocities(h) {
     }
     // restitution 0 (XPBD velocity step): cancel the relative normal velocity at an active contact,
     // including the separating "pop" velocity that positional projection creates under pressure
-    if (vn !== 0) {
+    if (vn + bounce !== 0) {
       const cra = rax * ny - ray * nx, crb = rbx * ny - rby * nx;
-      const w = A.im + A.iI * cra * cra + (B ? B.im + B.iI * crb * crb : 0), p = vn / w;
+      const w = A.im + A.iI * cra * cra + (B ? B.im + B.iI * crb * crb : 0), p = (vn + bounce) / w;
       applyVel(A, -p * nx, -p * ny, rax, ray); if (B) applyVel(B, p * nx, p * ny, rbx, rby);
     }
   }
 }
 function applyVel(b, px, py, rx, ry) { b.vx += px * b.im; b.vy += py * b.im; b.w += (rx * py - ry * px) * b.iI; }
+function wake(b) { if (!b.sleep) return; b.sleep = false; b.im = b.im0; b.iI = b.iI0; b.st = 0; }
+function wakeAll() { for (const b of bots) wake(b); }
+function sleepBody(b) { b.sleep = true; b.vx = b.vy = b.w = 0; b.im = 0; b.iI = 0; }
 
 function step(dt) {
   const h = dt / SUB, merges = [];
   for (const b of bots) {
+    b.air = b.nc === 0; b.nc = 0; b.sx0 = b.x; b.sy0 = b.y;
     b.age += dt; if (b.mcd > 0) b.mcd -= dt;
+    if (b.r < b.R) wake(b);
     if (b.r < b.R) b.r = Math.min(b.R, b.r + b.R * dt * 3.5);
   }
   for (let s = 0; s < SUB; s++) {
     for (const b of bots) {
       if (b.dead) continue;
       b.px = b.x; b.py = b.y; b.pa = b.a;
+      if (b.sleep) continue;
+      b.ovx = b.vx; b.ovy = b.vy; b.ow = b.w;
       b.vy += G * h; b.vx *= 0.9997; b.vy *= 0.9997; b.w *= 0.9985;
       b.x += b.vx * h; b.y += b.vy * h; b.a += b.w * h;
       updateWorld(b);
@@ -676,7 +691,7 @@ function step(dt) {
     collide(merges);
     solvePositions(); solvePositions();   // 2 Gauss-Seidel passes per substep
     for (const b of bots) {
-      if (b.dead) continue;
+      if (b.dead || b.sleep) continue;
       let vx = (b.x - b.px) / h, vy = (b.y - b.py) / h, w = (b.a - b.pa) / h;
       const sp = Math.hypot(vx, vy);
       if (sp > MAX_V) { vx *= MAX_V / sp; vy *= MAX_V / sp; }
@@ -684,13 +699,32 @@ function step(dt) {
       if (w > 25) w = 25; else if (w < -25) w = -25;
       // settle: gently bleed off creeping motion. Anything on a slope steeper than ~2 degrees
       // accelerates past this threshold within a few substeps, so nothing sticks on slopes.
-      if (vx * vx + vy * vy < 36 && w * w < 0.03) { vx *= 0.97; vy *= 0.97; w *= 0.97; }
+      if (b.nc) w *= (vx * vx + vy * vy < 900) ? 0.97 : 0.993;   // rolling resistance; slow spinners stop fast
+      if (b.nc) { const mw = Math.hypot(vx, vy) / b.r * 1.2 + 0.5; if (w > mw) w = mw; else if (w < -mw) w = -mw; }  // no slip-spin in contact
       b.vx = vx; b.vy = vy; b.w = w;
     }
     solveVelocities(h);
   }
   for (let k = 0; k < merges.length; k += 2) doMerge(merges[k], merges[k + 1]);
-  if (merges.length) bots = bots.filter(b => !b.dead);
+  if (merges.length) { bots = bots.filter(b => !b.dead); wakeAll(); }
+  // sleeping: settled bots freeze (no creep, no wall-climb); fast movers wake what they touch,
+  // and a sleeper that lost all its contacts wakes up and falls.
+  for (const b of bots) b.mv = b.sleep ? 0 : Math.hypot(b.x - b.sx0, b.y - b.sy0) / dt;   // net (noise-free) speed this step
+  for (const b of bots) {
+    if (b.sleep) { if (!b.nc) wake(b); continue; }
+    if (b.nc && b.mv < SLEEP_V && Math.abs(b.w) < SLEEP_W * 3) { b.st += dt; if (b.st > SLEEP_T) sleepBody(b); }
+    else b.st = 0;
+    // oscillation guard: in contact but going nowhere over 1 s (e.g. wedged and vibrating) -> rest
+    b.ct += dt;
+    if (b.ct >= 1.0) {
+      if (!b.sleep && b.nc && Math.hypot(b.x - b.ax, b.y - b.ay) < Math.max(3, 0.5 * b.r)) sleepBody(b);  // spinning in place counts as stuck
+      b.ct = 0; b.ax = b.x; b.ay = b.y; b.aa = b.a;
+    }
+  }
+  for (const m of bots) {
+    if (m.sleep || m.mv < 60) continue;
+    for (const b of bots) if (b.sleep && !(m.x0 > b.x1 + 4 || b.x0 > m.x1 + 4 || m.y0 > b.y1 + 4 || b.y0 > m.y1 + 4)) wake(b);
+  }
   let over = false;
   for (const b of bots) { updateWorld(b); if (b.age > 1.2 && b.y0 < DANGER && Math.abs(b.vy) < 220) over = true; }
   if (state === 'playing') {
@@ -823,13 +857,13 @@ function pointInBot(b, x, y) {
 function editorTap(p) {
   if (edTool === 'remove') {
     for (let i = bots.length - 1; i >= 0; i--) { const b = bots[i]; if (pointInBot(b, p.x, p.y)) {
-      bots.splice(i, 1); burst(b.x, b.y, TIERS[b.t].grok ? '#ffffff' : TIERS[b.t].c, 12, 220, 3); sfx.merge(b.t, 1); return true; } }
+      bots.splice(i, 1); wakeAll(); burst(b.x, b.y, TIERS[b.t].grok ? '#ffffff' : TIERS[b.t].c, 12, 220, 3); sfx.merge(b.t, 1); return true; } }
     return false;
   }
   const T = TIERS[edTier], r = T.r;
   const x = Math.max(JL - T.ux0 * r + 0.5, Math.min(JR - T.ux1 * r - 0.5, p.x));
   const y = Math.max(CEIL - T.uy0 * r + 0.5, Math.min(JB - T.uy1 * r - 0.5, p.y));
-  const b = makeBot(edTier, x, y, 0); b.landed = true; b.age = 0; bots.push(b);
+  const b = makeBot(edTier, x, y, 0); b.landed = true; b.age = 0; bots.push(b); wakeAll();
   ring(x, y, r * 1.2, T.grok ? '#ffffff' : T.c); sfx.drop();
   if (edTier > topReached) { topReached = edTier; drawLadder(); }
   return true;
