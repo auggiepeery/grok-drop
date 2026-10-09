@@ -606,6 +606,7 @@ const MERGE_GAP = 0.6;         // same-tier bots merge when within this distance
 const MU_D = 0.9;  const REST = 0.25, BOUNCE_MIN = 140;  // bounce only on real impacts
 const SLEEP_V = 10, SLEEP_W = 0.2, SLEEP_T = 0.3;  // settled bots fall asleep (frozen) until disturbed
 //               // friction (velocity level; positional static friction ratcheted bots up walls)
+const SPAWN_FX = 0.15, SPREAD_T = 0.35, SPREAD_CAP = 0.3, SPREAD_W = 0.25;   // merge spawn: visual pop time, push-out window, per-pass cap (u), new-bot mobility
 const FACE_COS = 0.9986, WALL_BAND = 0.5, MASS_RATIO = 2, POS_ITERS = 12, PAIR_CAP = 24;
 const PUSH_FREE = 0.0;           // overlap beyond this is resolved without injecting velocity
 let physPaused = false;        // editor: freeze physics
@@ -771,6 +772,7 @@ function addContact(A, B, pax, pay, pbx, pby, nx, ny) {
 }
 function collide(merges) {
   ccount = 0;
+  for (const b of bots) b.onWall = false;
   const n = bots.length;
   for (let i = 0; i < n; i++) {
     const A = bots[i]; if (A.dead) continue;
@@ -783,7 +785,7 @@ function collide(merges) {
       let dl = -1e9, dr = -1e9, db = -1e9, dc = -1e9;
       for (let k = 0; k < N; k++) { const x = W[2 * k], y = W[2 * k + 1];
         if (JL - x > dl) dl = JL - x; if (x - JR > dr) dr = x - JR; if (y - JB > db) db = y - JB; if (ceilY - y > dc) dc = ceilY - y; }
-      const md = [dl, dr, db, dc];
+      const md = [dl, dr, db, dc]; if (dl > -SLOP || dr > -SLOP || db > -SLOP || dc > -SLOP) A.onWall = true;
       for (let wi = 0; wi < 4; wi++) {
         if (md[wi] < -SLOP) continue;
         let lo = 1e9, hi = -1e9, sx = 0, sy = 0, n = 0; const lim = md[wi] - WALL_BAND, vert = wi < 2;
@@ -836,10 +838,18 @@ function solvePositions(last, rev) {
     if (last) { if (d > A.pen) A.pen = d; if (B && d > B.pen) B.pen = d; }   // residual overlap after this substep
     const cra = rax * ny - ray * nx, crb = rbx * ny - rby * nx;
     // mass-ratio clamp: a heavy bot landing on a tiny one would otherwise take many iterations to un-squeeze it
-    let sA = 1, sB = 1;
+    let sA = 1, sB = 1;   // (reassigned for fresh merges)
     if (B && A.im > 0 && B.im > 0) { if (A.im > B.im * MASS_RATIO) sB = A.im / (B.im * MASS_RATIO); else if (B.im > A.im * MASS_RATIO) sA = B.im / (A.im * MASS_RATIO); }
     const wa = (A.im + A.iI * cra * cra) * sA, wb = B ? (B.im + B.iI * crb * crb) * sB : 0;
-    const dl = d / (wa + wb); C.lam += dl;
+    let dl = d / (wa + wb);
+    if (B && ((A.spr > 0 && A.sprWith && A.sprWith.has(B.id)) || (B.spr > 0 && B.sprWith && B.sprWith.has(A.id)))) {   // fresh merge (bots it spawned overlapping): spread the push-out over several steps; the new bot yields less
+      // the new bot yields less - unless the neighbour is already pinned against a wall/floor/lid: then the new bot gives way
+      if (A.spr > 0 && A.sprWith.has(B.id)) { if (B.onWall) sB *= SPREAD_W; else sA *= SPREAD_W; }
+      else { if (A.onWall) sA *= SPREAD_W; else sB *= SPREAD_W; }
+      const wa2 = (A.im + A.iI * cra * cra) * sA, wb2 = B ? (B.im + B.iI * crb * crb) * sB : 0;
+      dl = Math.min(d, SPREAD_CAP) / (wa2 + wb2);
+    }
+    C.lam += dl;
     const f = d > PUSH_FREE ? (d - PUSH_FREE) / d : 0;
     applyPos(A, -dl * nx * sA, -dl * ny * sA, rax, ray, f);
     if (B) applyPos(B, dl * nx * sB, dl * ny * sB, rbx, rby, f);
@@ -914,10 +924,11 @@ function step(dt) {
   for (const b of bots) {
     b.air = b.nc === 0; b.nc = 0; b.sx0 = b.x; b.sy0 = b.y;
     b.age += dt; if (b.mcd > 0) b.mcd -= dt;
-    if (b.r < b.R && b.fade == null) wake(b);
-    if (b.r < b.R && b.fade == null) b.r = Math.min(b.R, b.r + Math.min(0.8, b.R * dt * (b.pen > 0.3 ? 0 : b.pen > 0.1 ? 0.12 : 2.0)));   // merged bot grows only as fast as the pile can make room
+    if (b.spr > 0) { b.spr -= dt; b.sleep && wake(b); }
+    if (b.spawnFx > 0) b.spawnFx = Math.max(0, b.spawnFx - dt);
     b.pen = 0; b.vdown = Math.max((b.vdown || 0) * 0.9, b.vx * gx + b.vy * gy);
   }
+  for (const b of bots) if (b.spr > 0 && !b.dead) spreadEngulfed(b);
   for (let s = 0; s < sub; s++) {
     for (const b of bots) {
       if (b.dead) continue;
@@ -998,28 +1009,66 @@ function land(b) { b.landed = true; const v = Math.hypot(b.vx, b.vy); if (v > 25
 function react(b, e, d) { b.expr = e; b.exprT = d; }
 
 // shrink a freshly merged bot until it doesn't poke into any neighbour (it then grows as room allows)
-function fitSpawn(nb, a, b) {
-  for (let k = 0; k < 10; k++) {
-    updateWorld(nb); let hit = false; const W = nb.wv, N = TIERS[nb.t].N;
-    for (const o of bots) { if (o === a || o === b || o.dead || o.x0 > nb.x1 || nb.x0 > o.x1 || o.y0 > nb.y1 || nb.y0 > o.y1) continue;
-      for (let i = 0; i < N && !hit; i++) if (pointInBot(o, W[2 * i], W[2 * i + 1])) hit = true;
-      const Wo = o.wv, No = TIERS[o.t].N; for (let i = 0; i < No && !hit; i++) if (pointInBot(nb, Wo[2 * i], Wo[2 * i + 1])) hit = true;
-      if (hit) break; }
-    if (!hit || nb.r < nb.R * 0.12) return; nb.r *= 0.8;
+// merged bot spawns at FULL size. Pick the spot: the contact midpoint, nudged against gravity into free space (fewest
+// outline vertices inside neighbours), kept inside the jar. The remaining overlap is pushed out over a few steps by the
+// position solver (velocity-free, capped per pass, neighbours move more than the new bot) - see SPREAD_* below.
+function overlapScore(nb, a, b, set) {
+  updateWorld(nb); let n = 0; const W = nb.wv, N = TIERS[nb.t].N;
+  for (const o of bots) { if (o === a || o === b || o.dead || o.x0 > nb.x1 || nb.x0 > o.x1 || o.y0 > nb.y1 || nb.y0 > o.y1) continue;
+    const n0 = n;
+    for (let i = 0; i < N; i++) if (pointInBot(o, W[2 * i], W[2 * i + 1])) n++;
+    const Wo = o.wv, No = TIERS[o.t].N; for (let i = 0; i < No; i++) if (pointInBot(nb, Wo[2 * i], Wo[2 * i + 1])) n++;
+    if (set && n > n0) set.add(o.id); }
+  return n;
+}
+// A neighbour whose centre ended up deep inside a freshly merged (full-size) bot has no reliable contact normal, so the
+// polygon solver can stall on it. Ease it out radially (position-only, so no velocity/launch), capped per step; the new
+// bot only takes what a wall/lid blocks (and never downward). The regular capped contact finishes the job.
+function spreadEngulfed(nb) {
+  const lim = nb.R * 0.92;
+  for (const o of bots) {
+    if (o === nb || o.dead || !nb.sprWith.has(o.id)) continue;
+    let dx = o.x - nb.x, dy = o.y - nb.y, d = Math.hypot(dx, dy);
+    const deep = lim - d + o.r * 0.3; if (deep <= 0) continue;
+    if (d < 1e-3) { dx = -gx; dy = -gy; d = Math.hypot(dx, dy) || 1; }
+    const ux = dx / d, uy = dy / d, mv = Math.min(deep, 1 + 0.25 * deep);
+    const ox = o.x, oy = o.y;
+    o.x += ux * mv; o.y += uy * mv; clampInJar(o); o.sleep && wake(o);
+    const got = (o.x - ox) * ux + (o.y - oy) * uy;
+    if (mv - got > 0.01 && -(ux * gx + uy * gy) < 0.2) { nb.x -= ux * (mv - got); nb.y -= uy * (mv - got); clampInJar(nb); }   // never shove the new bot down onto what's under it
   }
 }
+function clampInJar(nb) {
+  updateWorld(nb);
+  nb.x += Math.max(0, JL - nb.x0) - Math.max(0, nb.x1 - JR);
+  nb.y += Math.max(0, ceilY - nb.y0) - Math.max(0, nb.y1 - JB);
+  nb.px = nb.x; nb.py = nb.y; updateWorld(nb);
+}
+function placeSpawn(nb, a, b) {
+  const x0 = nb.x, y0 = nb.y, ux = -gx, uy = -gy, ul = Math.hypot(ux, uy) || 1;
+  let best = null;
+  for (const k of [0, 0.1, 0.2, 0.32, 0.45]) {
+    nb.x = x0 + ux / ul * k * nb.R; nb.y = y0 + uy / ul * k * nb.R; clampInJar(nb);
+    const sc = overlapScore(nb, a, b) + k * 6;   // small bias toward the true contact point
+    if (!best || sc < best.sc) best = { sc, x: nb.x, y: nb.y };
+    if (sc === 0) break;
+  }
+  nb.x = nb.px = best.x; nb.y = nb.py = best.y; nb.sprWith = new Set(); overlapScore(nb, a, b, nb.sprWith);   // only these get the spread push-out
+}
 function doMerge(a, b) {
-  const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
+  const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;   // equal tiers: the centre midpoint is the contact midpoint
   (comboT < 0.6 && combo > 0) ? combo++ : (combo = 1); comboT = 0;
   const mult = 1 + (combo - 1) * 0.5;
   if (a.t === TOP) { startFinale(a, b, x, y, mult); return; }
   const nt = a.t + 1, T = TIERS[nt];
   const nb = makeBot(nt, x, y, (a.a + b.a) / 2);
   nb.vx = (a.vx + b.vx) / 4; nb.vy = Math.max(-80, (a.vy + b.vy) / 4 - 40);   // calm hand-off (no inherited launch) nb.w = (a.w + b.w) / 2;
-  nb.r = Math.min(a.r * 0.7, T.r * 0.4);   // start small, then grow as the pile makes room (no overlap pop)
-  nb.happy = 0.6; react(nb, 'happy', 0.9); nb.pop = 0.6; nb.mcd = 0.06; nb.landed = true; nb.age = Math.max(a.age, b.age); updateWorld(nb);
+  // full physical size from the first frame; only the drawing pops (1.0 -> 1.12 -> 1.0 over 0.15 s)
+  nb.spawnFx = SPAWN_FX; nb.spr = SPREAD_T;
+  nb.happy = 0.6; react(nb, 'happy', 0.9); nb.mcd = 0.06; nb.landed = true; nb.age = Math.max(a.age, b.age); updateWorld(nb);
   const firstEver = !tainted && state === 'playing' && stats.made[nt] + stats.dropped[nt] === 0;
-  fitSpawn(nb, a, b); bots.push(nb); stat('made', nt);
+  placeSpawn(nb, a, b); bots.push(nb); stat('made', nt);
+  for (const o of bots) if (o !== nb && !(o.x0 > nb.x1 + 4 || nb.x0 > o.x1 + 4 || o.y0 > nb.y1 + 4 || nb.y0 > o.y1 + 4)) wake(o);
   if (firstEver) { $('colBtn').classList.add('new'); setTimeout(() => toast('ADDED TO COLLECTION: ' + T.name.toUpperCase()), topReached < nt ? 1500 : 0); }
   const pts = Math.round(POINTS[nt] * 10 * mult); addScore(pts);
   burst(x, y, TIERS[a.t].c, 10 + nt * 2, 190 + nt * 25, 2.4 + nt * 0.3);
@@ -1662,7 +1711,8 @@ function render(dt) {
     const nv = b.nerv || 0, jit = nv > 0.4 ? Math.sin(time * 40 + b.id) * nv * 0.8 : 0;
     let ex = b.expr || (nv > 0.35 ? 'nervous' : null);
     if (b.fade != null) c.globalAlpha = 1 - b.fade * 0.7;
-    drawBot(c, b.t, b.x + jit, b.y, b.r, { a: b.a, lx: b.lx, ly: b.ly, sx: 1 + pp, sy: 1 - pp,
+    const popS = b.spawnFx > 0 ? 1 + 0.12 * Math.sin(Math.PI * (1 - b.spawnFx / SPAWN_FX)) : 1;   // merge pop: drawing only
+    drawBot(c, b.t, b.x + jit, b.y, b.r * popS, { a: b.a, lx: b.lx, ly: b.ly, sx: 1 + pp, sy: 1 - pp,
       blink: b.blinkT > 0 && ex !== 'shock' ? 1 : 0, happy: b.happy > 0 ? 1 : 0, expr: ex, wink: b.wink, blush: b.blush, sweat: nv > 0.35 ? nv : 0, t: time + b.id });
     c.globalAlpha = 1;
   }
@@ -1727,7 +1777,7 @@ function drawLadder() {
 }
 
 // ================================================================ bot interactions (cute, rare, small nudges)
-let inter = null, interT = 3, interOn = true;
+let inter = null, interT = 3, interOn = true, testHold = false;   // testHold: test hook, freezes the frame loop (state unchanged)
 const INTER_KINDS = ['smile', 'wink', 'slap', 'highfive', 'blush', 'slap', 'smile'];
 function restingish(b) { return b.sleep || (b.landed && Math.hypot(b.vx, b.vy) < 15); }
 function pickInteraction(force) {
@@ -2029,7 +2079,7 @@ let last = performance.now(), acc = 0;
 function frame(now) {
   let dt = (now - last) / 1000; last = now;
   if (dt > 0.1) dt = 0.1; if (dt < 0) dt = 0;
-  const frozen = state === 'paused' || modalOpen || colOpen || menuOpen;
+  const frozen = state === 'paused' || modalOpen || colOpen || menuOpen || testHold;
   if (!frozen) {
     if (!(state === 'editor' && physPaused)) {
       acc += dt; let n = 0;
@@ -2063,7 +2113,7 @@ window.GrokDrop = {
   contactPairs() { const out = new Set(); for (let k = 0; k < ccount; k++) { const C = cpool[k]; if (C.b && C.lam > 0) out.add(Math.min(C.a.id, C.b.id) + '-' + Math.max(C.a.id, C.b.id)); } return [...out]; },
   landingY, step: dt => step(dt || STEP), collisionInfo: () => TIERS.map(T => ({ name: T.name, verts: T.N, parts: T.parts.length })),
   get current() { return curTier; }, set current(t) { curTier = t; drawNext(); },
-  get finale() { return finale; }, get stats() { return JSON.parse(JSON.stringify(stats)); }, openCollection, closeCollection, get colOpen() { return colOpen; }, enterEditor, exitEditor, get mode() { return mode; }, setMode, openModes, closeModes, get menuOpen() { return menuOpen; },
+  get finale() { return finale; }, get stats() { return JSON.parse(JSON.stringify(stats)); }, openCollection, closeCollection, get colOpen() { return colOpen; }, set hold(v) { testHold = !!v; last = performance.now(); acc = 0; }, enterEditor, exitEditor, get mode() { return mode; }, setMode, openModes, closeModes, get menuOpen() { return menuOpen; },
   get gravity() { return { gx, gy, dir: gdir, flipT, turning: turnT >= 0, nextDir, flips, hold: flipHold, ceil: ceilY }; }, flipIn(s) { flipT = s; }, fill: () => fillFrac(), get zenCleared() { return zenCleared; }, get padOn() { return padOn; }, get padPlaying() { return !!pad; }, setPad, get dangerT() { return dangerT; }, contactsDbg() { const o = []; for (let k = 0; k < ccount; k++) { const C = cpool[k]; const ca = Math.cos(C.a.a), sa = Math.sin(C.a.a); o.push({ a: C.a.id, b: C.b ? C.b.id : null, nx: +C.nx.toFixed(3), ny: +C.ny.toFixed(3), px: +(C.a.x + C.ax * ca - C.ay * sa).toFixed(2), py: +(C.a.y + C.ax * sa + C.ay * ca).toFixed(2), dep: +C.dep.toFixed(2), lam: +C.lam.toFixed(3) }); } return o; }, physStats, haptic, get vibe() { return vibeOn; }, set vibe(v) { setVibe(v); }, canVibe, get finEnd() { return finEnd; }, get interaction() { return inter; }, set interactions(v) { interOn = v; if (!v) inter = null; }, interact(kind) { inter = pickInteraction(kind); return !!inter; },
   restart, pause: setPaused, TIERS, world: { WW, WH, JL, JR, JT, JB, DANGER, DROP_Y },
 };
