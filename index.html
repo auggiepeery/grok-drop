@@ -109,6 +109,7 @@
     <div class="btns">
       <button class="iconbtn" id="pauseBtn" aria-label="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg></button>
       <button class="iconbtn" id="muteBtn" aria-label="Toggle sound"></button>
+      <button class="iconbtn" id="vibeBtn" aria-label="Toggle vibration" title="Vibration (V)"></button>
     </div>
   </div>
   <div id="main">
@@ -457,6 +458,33 @@ const sfx = {
 };
 const ICON_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
 const ICON_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>';
+// ---------------------------------------------------------------- haptics (navigator.vibrate; no-op where unsupported, e.g. iOS Safari)
+const VIBE_KEY = 'grokDrop.vibe';
+const canVibe = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
+let vibeOn = true; try { vibeOn = localStorage.getItem(VIBE_KEY) !== '0'; } catch (e) {}
+let lastVibe = 0, lastVibeTick = 0, vibeBusyUntil = 0;
+const HAPTIC = {
+  drop: () => 12,
+  merge: t => t >= 7 ? [18 + t * 4, 35, 12 + t * 3] : 8 + t * 4,     // stronger / longer with tier
+  tick: () => 6,
+  slap: () => [14, 40, 22],
+  unlock: () => [25, 50, 25, 50, 45],
+  over: () => [90, 70, 140],
+  singularity: () => [30, 40, 35, 40, 45, 35, 55, 30, 70, 25, 90, 20, 120, 20, 160, 20, 220, 30, 400],   // rising rumble into the boom
+};
+function haptic(kind, arg) {
+  if (!vibeOn || !canVibe) return false;
+  const now = performance.now();
+  if (kind === 'tick') { if (now - lastVibeTick < 180 || now < vibeBusyUntil) return false; lastVibeTick = now; }   // never buzz constantly
+  else if (kind !== 'singularity' && kind !== 'over' && kind !== 'unlock' && now - lastVibe < 45) return false;   // coalesce rapid combo merges
+  const pat = HAPTIC[kind](arg || 0);
+  try { navigator.vibrate(pat); } catch (e) { return false; }
+  lastVibe = now; vibeBusyUntil = now + (Array.isArray(pat) ? pat.reduce((a, b) => a + b, 0) : pat);
+  return true;
+}
+const ICON_VIBE_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="8" y="3" width="8" height="18" rx="2"/><path d="M4 8v8M20 8v8M1.5 10v4M22.5 10v4"/></svg>';
+const ICON_VIBE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="8" y="3" width="8" height="18" rx="2"/><path d="M3 3l18 18"/></svg>';
+function setVibe(v) { vibeOn = v; store(VIBE_KEY, v ? '1' : '0'); const el = document.getElementById('vibeBtn'); if (el) { el.innerHTML = v ? ICON_VIBE_ON : ICON_VIBE_OFF; el.style.opacity = v ? '' : '.55'; } if (!v && canVibe) try { navigator.vibrate(0); } catch (e) {} }
 function setMuted(m) { muted = m; store(MUTE_KEY, m ? '1' : '0'); if (master) master.gain.value = m ? 0 : 0.5; muteBtn.innerHTML = m ? ICON_OFF : ICON_ON; }
 
 // ================================================================ effects
@@ -482,10 +510,11 @@ const SUB = 3;                 // substeps per 1/120 s step  -> h = 1/360 s
 const CEIL = 2;                // invisible ceiling y
 const SLOP = 0.5;              // contact detection margin (world units)
 const MERGE_GAP = 0.6;         // same-tier bots merge when within this distance (i.e. touching)
-const MU_D = 0.9;  const REST = 0.16, BOUNCE_MIN = 140;  // bounce only on real impacts
+const MU_D = 0.9;  const REST = 0.25, BOUNCE_MIN = 140;  // bounce only on real impacts
 const SLEEP_V = 10, SLEEP_W = 0.2, SLEEP_T = 0.3;  // settled bots fall asleep (frozen) until disturbed
 //               // friction (velocity level; positional static friction ratcheted bots up walls)
-const PUSH_FREE = 1.0;         // overlap beyond this is resolved without injecting velocity
+const MASS_RATIO = 2, POS_ITERS = 12, PAIR_CAP = 24;
+const PUSH_FREE = 0.0;           // overlap beyond this is resolved without injecting velocity
 let physPaused = false;        // editor: freeze physics
 const cpool = []; let ccount = 0;
 function newContact() { let c = cpool[ccount]; if (!c) { c = {}; cpool[ccount] = c; } ccount++; return c; }
@@ -571,10 +600,17 @@ function partContacts(A, ja, B, jb, merges) {
     else if (d2 < 0) { const t = d2 / (d2 - d1); c2x += (c1x - c2x) * t; c2y += (c1y - c2y) * t; }
     return true;
   };
-  if (!clip(v1x, v1y, tx, ty) || !clip(v2x, v2y, -tx, -ty)) return 0;
-  _cl[0] = c1x; _cl[1] = c1y; _cl[2] = c2x; _cl[3] = c2y;
+  let np = 2;
+  if (!clip(v1x, v1y, tx, ty) || !clip(v2x, v2y, -tx, -ty)) {
+    // incident edge lies past the ends of a short reference edge (typical at concave seams of compound bots):
+    // fall back to the incident part's deepest vertex so the pair still gets a contact and can't sink in
+    let ds = Infinity, dk = 0;
+    for (let i = 0; i < ni; i++) { const sp = (WI[2 * ii[i]] - v1x) * rnx + (WI[2 * ii[i] + 1] - v1y) * rny; if (sp < ds) { ds = sp; dk = i; } }
+    if (ds > SLOP) return 0;
+    _cl[0] = WI[2 * ii[dk]]; _cl[1] = WI[2 * ii[dk] + 1]; np = 1;
+  } else { _cl[0] = c1x; _cl[1] = c1y; _cl[2] = c2x; _cl[3] = c2y; }
   let n = 0;
-  for (let k = 0; k < 2; k++) {
+  for (let k = 0; k < np; k++) {
     const px = _cl[2 * k], py = _cl[2 * k + 1], sep = (px - v1x) * rnx + (py - v1y) * rny;
     if (sep > SLOP) continue;
     n++;
@@ -587,7 +623,7 @@ function partContacts(A, ja, B, jb, merges) {
 }
 function canMerge(A, B) { return (state === 'playing' || state === 'editor') && A.mcd <= 0 && B.mcd <= 0 && !A.dead && !B.dead; }
 function addContact(A, B, pax, pay, pbx, pby, nx, ny) {
-  const C = newContact(); C.a = A; C.b = B; C.nx = nx; C.ny = ny; C.lam = 0; A.nc++; if (B) B.nc++;
+  const C = newContact(); C.a = A; C.b = B; C.nx = nx; C.ny = ny; C.lam = 0; C.dep = (pax - pbx) * nx + (pay - pby) * ny; A.nc++; if (B) B.nc++;
   const ca = Math.cos(A.a), sa = Math.sin(A.a), dx = pax - A.x, dy = pay - A.y;
   C.ax = dx * ca + dy * sa; C.ay = -dx * sa + dy * ca; // body-local (unrotated) offset
   if (B) { const cb = Math.cos(B.a), sb = Math.sin(B.a), ex = pbx - B.x, ey = pby - B.y; C.bx = ex * cb + ey * sb; C.by = -ex * sb + ey * cb; }
@@ -615,7 +651,7 @@ function collide(merges) {
       if (A.x0 > B.x1 + SLOP || B.x0 > A.x1 + SLOP || A.y0 > B.y1 + SLOP || B.y0 > A.y1 + SLOP) continue;
       if (A.sleep && B.sleep) { A.nc++; B.nc++; continue; }
       if (A.sleep !== B.sleep) { const m = A.sleep ? B : A; if (m.mv > 60) { wake(A); wake(B); } }
-      const TA = TIERS[A.t], TB = TIERS[B.t];
+      const TA = TIERS[A.t], TB = TIERS[B.t], c0 = ccount;
       for (let pa = 0; pa < TA.parts.length && !A.dead; pa++) {
         const qa = A.pn[pa];
         for (let pb = 0; pb < TB.parts.length; pb++) {
@@ -625,11 +661,14 @@ function collide(merges) {
           if (A.dead) break;
         }
       }
+      if (ccount - c0 > PAIR_CAP) { const sl = cpool.slice(c0, ccount).sort((p, q) => q.dep - p.dep); for (let m = 0; m < sl.length; m++) cpool[c0 + m] = sl[m]; ccount = c0 + PAIR_CAP; }   // keep the deepest few per pair (compound shapes)
       if (A.dead) break;
     }
   }
 }
-function solvePositions() {
+const physStats = { sub: 0, iters: 0, contacts: 0, maxd: 0 };
+function solvePositions(last) {
+  let maxd = 0;
   for (let k = 0; k < ccount; k++) {
     const C = cpool[k], A = C.a, B = C.b; if (A.dead || (B && B.dead)) continue;
     let ca = Math.cos(A.a), sa = Math.sin(A.a);
@@ -639,13 +678,19 @@ function solvePositions() {
     const nx = C.nx, ny = C.ny;
     const d = (A.x + rax - pbx) * nx + (A.y + ray - pby) * ny;
     if (d <= 0) continue;   // keep lam from the first pass (velocity pass needs it)
+    if (d > maxd) maxd = d;
+    if (last) { if (d > A.pen) A.pen = d; if (B && d > B.pen) B.pen = d; }   // residual overlap after this substep
     const cra = rax * ny - ray * nx, crb = rbx * ny - rby * nx;
-    const wa = A.im + A.iI * cra * cra, wb = B ? B.im + B.iI * crb * crb : 0;
+    // mass-ratio clamp: a heavy bot landing on a tiny one would otherwise take many iterations to un-squeeze it
+    let sA = 1, sB = 1;
+    if (B && A.im > 0 && B.im > 0) { if (A.im > B.im * MASS_RATIO) sB = A.im / (B.im * MASS_RATIO); else if (B.im > A.im * MASS_RATIO) sA = B.im / (A.im * MASS_RATIO); }
+    const wa = (A.im + A.iI * cra * cra) * sA, wb = B ? (B.im + B.iI * crb * crb) * sB : 0;
     const dl = d / (wa + wb); C.lam += dl;
     const f = d > PUSH_FREE ? (d - PUSH_FREE) / d : 0;
-    applyPos(A, -dl * nx, -dl * ny, rax, ray, f);
-    if (B) applyPos(B, dl * nx, dl * ny, rbx, rby, f);
+    applyPos(A, -dl * nx * sA, -dl * ny * sA, rax, ray, f);
+    if (B) applyPos(B, dl * nx * sB, dl * ny * sB, rbx, rby, f);
   }
+  return maxd;
 }
 function applyPos(b, px, py, rx, ry, f) {
   const dx = px * b.im, dy = py * b.im, dth = (rx * py - ry * px) * b.iI;
@@ -675,7 +720,7 @@ function solveVelocities(h) {
     }
     // restitution 0 (XPBD velocity step): cancel the relative normal velocity at an active contact,
     // including the separating "pop" velocity that positional projection creates under pressure
-    if (vn + bounce !== 0) {
+    if (vn + bounce > 0) {   // only stop approach (never pull a separating contact back together)
       const cra = rax * ny - ray * nx, crb = rbx * ny - rby * nx;
       const w = A.im + A.iI * cra * cra + (B ? B.im + B.iI * crb * crb : 0), p = (vn + bounce) / w;
       applyVel(A, -p * nx, -p * ny, rax, ray); if (B) applyVel(B, p * nx, p * ny, rbx, rby);
@@ -688,14 +733,17 @@ function wakeAll() { for (const b of bots) wake(b); }
 function sleepBody(b) { b.sleep = true; b.vx = b.vy = b.w = 0; b.im = 0; b.iI = 0; }
 
 function step(dt) {
-  const h = dt / SUB, merges = [];
+  let vmax = 0; for (const b of bots) if (!b.sleep) { const v = Math.hypot(b.vx, b.vy); if (v > vmax) vmax = v; }
+  const sub = Math.min(6, Math.max(SUB, Math.ceil(vmax * dt / 2)));   // adaptive: fast movers travel <= ~1.5 u per substep (no deep corner hits)
+  const h = dt / sub, merges = []; physStats.sub = sub; physStats.iters = 0; physStats.contacts = 0;
   for (const b of bots) {
     b.air = b.nc === 0; b.nc = 0; b.sx0 = b.x; b.sy0 = b.y;
     b.age += dt; if (b.mcd > 0) b.mcd -= dt;
     if (b.r < b.R) wake(b);
-    if (b.r < b.R) b.r = Math.min(b.R, b.r + b.R * dt * 3.5);
+    if (b.r < b.R) b.r = Math.min(b.R, b.r + Math.min(0.8, b.R * dt * (b.pen > 0.3 ? 0 : b.pen > 0.1 ? 0.12 : 2.0)));   // merged bot grows only as fast as the pile can make room
+    b.pen = 0; b.vdown = Math.max((b.vdown || 0) * 0.9, b.vy);
   }
-  for (let s = 0; s < SUB; s++) {
+  for (let s = 0; s < sub; s++) {
     for (const b of bots) {
       if (b.dead) continue;
       b.px = b.x; b.py = b.y; b.pa = b.a;
@@ -706,7 +754,7 @@ function step(dt) {
       updateWorld(b);
     }
     collide(merges);
-    solvePositions(); solvePositions();   // 2 Gauss-Seidel passes per substep
+    for (let it = 0; it < POS_ITERS; it++) { const m = solvePositions(it === POS_ITERS - 1); physStats.iters++; physStats.maxd = m; if (it >= 1 && m < 0.02) break; }   // early out once converged   // Gauss-Seidel passes per substep
     for (const b of bots) {
       if (b.dead || b.sleep) continue;
       let vx = (b.x - b.px) / h, vy = (b.y - b.py) / h, w = (b.a - b.pa) / h;
@@ -721,7 +769,10 @@ function step(dt) {
       if (b.nc) { const mw = Math.hypot(vx, vy) / b.r * RL[2] + RL[3]; if (w > mw) w = mw; else if (w < -mw) w = -mw; }  // limited slip-spin in contact
       b.vx = vx; b.vy = vy; b.w = w;
     }
+    physStats.contacts = Math.max(physStats.contacts, ccount);
     solveVelocities(h);
+    // anti-launch: contacts may bounce a bot back up only as much as restitution allows; spin/friction/pile pressure can't fling it
+    for (const b of bots) { if (b.sleep || b.dead || !b.nc) continue; const up = 50 + 0.2 * Math.max(0, b.vdown); if (-b.vy > up) b.vy = -up; }
   }
   for (let k = 0; k < merges.length; k += 2) doMerge(merges[k], merges[k + 1]);
   if (merges.length) { bots = bots.filter(b => !b.dead); wakeAll(); }
@@ -731,12 +782,12 @@ function step(dt) {
   for (const b of bots) {
     if (b.sleep) { if (!b.nc) wake(b); continue; }
     if (!b.nc) b.ctime = 0; else if ((b.ctime = (b.ctime || 0) + dt) > 2.2) { const k = Math.exp(-7 * dt * Math.min(1, (b.ctime - 2.2) / 0.4)); b.vx *= k; b.vy *= k; b.w *= k; }  // contact fatigue: long-lived contacts settle
-    if (b.nc && b.mv < SLEEP_V && Math.abs(b.w) < SLEEP_W * 3) { b.st += dt; if (b.st > SLEEP_T) sleepBody(b); }
+    if (b.nc && b.mv < SLEEP_V && Math.abs(b.w) < SLEEP_W * 3 && !(b.pen > 0.5)) {   /* never freeze with residual overlap */ b.st += dt; if (b.st > SLEEP_T) sleepBody(b); }
     else b.st = 0;
     // oscillation guard: in contact but going nowhere over 1 s (e.g. wedged and vibrating) -> rest
     b.ct += dt;
     if (b.ct >= 1.0) {
-      if (!b.sleep && b.nc && Math.hypot(b.x - b.ax, b.y - b.ay) < Math.max(3, 0.5 * b.r)) sleepBody(b);  // spinning in place counts as stuck
+      if (!b.sleep && b.nc && !(b.pen > 0.5) && Math.hypot(b.x - b.ax, b.y - b.ay) < Math.max(3, 0.5 * b.r)) sleepBody(b);  // spinning in place counts as stuck
       b.ct = 0; b.ax = b.x; b.ay = b.y; b.aa = b.a;
     }
   }
@@ -744,13 +795,14 @@ function step(dt) {
     if (m.sleep || m.mv < 60) continue;
     for (const b of bots) if (b.sleep && !(m.x0 > b.x1 + 4 || b.x0 > m.x1 + 4 || m.y0 > b.y1 + 4 || b.y0 > m.y1 + 4)) wake(b);
   }
-  for (const b of bots) { const dv = b.pvy - b.vy; if (dv > 220 && b.vy < -15 && b.landed) { sfx.tick(dv); if (!b.expr) react(b, 'squint', 0.25); b.pop = Math.max(b.pop, Math.min(0.4, dv / 1500)); } b.pvy = b.vy; }
+  for (const b of bots) { const dv = b.pvy - b.vy; if (dv > 220 && b.vy < -15 && b.landed) { sfx.tick(dv); if (dv > 450) haptic('tick'); if (!b.expr) react(b, 'squint', 0.25); b.pop = Math.max(b.pop, Math.min(0.4, dv / 1500)); } b.pvy = b.vy; }
   // rescue: a smaller bot whose centre ended up inside a bigger bot's outline (tunnelled into a concave part) gets pushed back out
   for (const A of bots) { if (A.sleep) continue;
     for (const B of bots) { if (B === A || B.r <= A.r || A.x < B.x0 || A.x > B.x1 || A.y < B.y0 || A.y > B.y1 || !pointInBot(B, A.x, A.y)) continue;
       let dx = A.x - B.x, dy = A.y - B.y, d = Math.hypot(dx, dy); if (d < 1e-3) { dx = 0; dy = -1; d = 1; }
       dx /= d; dy /= d; let k = d; while (k < B.r * 1.4 && pointInBot(B, B.x + dx * k, B.y + dy * k)) k += 2;
-      A.x = A.px = B.x + dx * (k + A.r * 0.6); A.y = A.py = B.y + dy * (k + A.r * 0.6); A.vx = A.vy = A.w = 0; wake(A); wake(B); updateWorld(A); break; } }
+      const mv = Math.min(3, k + A.r * 0.6 - d);   // gradual (<=3 u per step), velocity-free: no teleport
+      A.x += dx * mv; A.px += dx * mv; A.y += dy * mv; A.py += dy * mv; A.vx *= 0.5; A.vy *= 0.5; wake(A); wake(B); updateWorld(A); break; } }
   let over = false;
   for (const b of bots) { updateWorld(b); if (b.age > 1.2 && b.y0 < DANGER && Math.abs(b.vy) < 220) over = true; }
   if (state === 'playing' && !finale) {
@@ -762,6 +814,17 @@ function step(dt) {
 function land(b) { b.landed = true; const v = Math.hypot(b.vx, b.vy); if (v > 250) { sfx.land(v); b.pop = Math.max(b.pop, 0.35); if (!b.expr) react(b, 'squint', 0.35); } }
 function react(b, e, d) { b.expr = e; b.exprT = d; }
 
+// shrink a freshly merged bot until it doesn't poke into any neighbour (it then grows as room allows)
+function fitSpawn(nb, a, b) {
+  for (let k = 0; k < 10; k++) {
+    updateWorld(nb); let hit = false; const W = nb.wv, N = TIERS[nb.t].N;
+    for (const o of bots) { if (o === a || o === b || o.dead || o.x0 > nb.x1 || nb.x0 > o.x1 || o.y0 > nb.y1 || nb.y0 > o.y1) continue;
+      for (let i = 0; i < N && !hit; i++) if (pointInBot(o, W[2 * i], W[2 * i + 1])) hit = true;
+      const Wo = o.wv, No = TIERS[o.t].N; for (let i = 0; i < No && !hit; i++) if (pointInBot(nb, Wo[2 * i], Wo[2 * i + 1])) hit = true;
+      if (hit) break; }
+    if (!hit || nb.r < nb.R * 0.12) return; nb.r *= 0.8;
+  }
+}
 function doMerge(a, b) {
   const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
   (comboT < 0.6 && combo > 0) ? combo++ : (combo = 1); comboT = 0;
@@ -769,15 +832,16 @@ function doMerge(a, b) {
   if (a.t === TOP) { startFinale(a, b, x, y, mult); return; }
   const nt = a.t + 1, T = TIERS[nt];
   const nb = makeBot(nt, x, y, (a.a + b.a) / 2);
-  nb.vx = (a.vx + b.vx) / 2; nb.vy = (a.vy + b.vy) / 2 - 40; nb.w = (a.w + b.w) / 2;
-  nb.r = Math.max(a.r, T.r * 0.6); nb.happy = 0.6; react(nb, 'happy', 0.9); nb.pop = 0.6; nb.mcd = 0.06; nb.landed = true; nb.age = Math.max(a.age, b.age); updateWorld(nb);
-  bots.push(nb);
+  nb.vx = (a.vx + b.vx) / 4; nb.vy = Math.max(-80, (a.vy + b.vy) / 4 - 40);   // calm hand-off (no inherited launch) nb.w = (a.w + b.w) / 2;
+  nb.r = Math.min(a.r * 0.7, T.r * 0.4);   // start small, then grow as the pile makes room (no overlap pop)
+  nb.happy = 0.6; react(nb, 'happy', 0.9); nb.pop = 0.6; nb.mcd = 0.06; nb.landed = true; nb.age = Math.max(a.age, b.age); updateWorld(nb);
+  fitSpawn(nb, a, b); bots.push(nb);
   const pts = Math.round(POINTS[nt] * 10 * mult); addScore(pts);
   burst(x, y, TIERS[a.t].c, 10 + nt * 2, 190 + nt * 25, 2.4 + nt * 0.3);
   burst(x, y, '#ffffff', 5 + nt, 150 + nt * 20, 1.8);
   ring(x, y, T.r * 1.45, T.grok ? '#ffffff' : T.c);
   floatText(x, y - T.r * 0.3, '+' + pts, 16 + nt * 1.4, '#ffffff');
-  sfx.merge(nt, combo);
+  sfx.merge(nt, combo); haptic('merge', nt);
   shake = Math.max(shake, 1.5 + nt * 1.1);   // shake scales with merge size
   for (const o of bots) if (o !== nb && Math.hypot(o.x - x, o.y - y) < T.r * 2.2) { o.look = { x, y, t: 0.8 }; if (!o.expr) react(o, 'happy', 0.5); }
   if (nt > topReached && state === 'playing') {
@@ -786,7 +850,7 @@ function doMerge(a, b) {
     // first-unlock cheer: everybody squints happily and hops; confetti in the new colour
     for (const o of bots) { react(o, 'cheer', 1.2); o.pop = 0.8; }
     burst(x, y - T.r, T.grok ? '#ffffff' : T.c, 30, 380, 3); burst(x, y - T.r, '#ffd23f', 16, 320, 2.5);
-    floatText(x, y - T.r - 26, 'NEW!', 22, '#ffd23f', 1.4); sfx.unlock();
+    floatText(x, y - T.r - 26, 'NEW!', 22, '#ffd23f', 1.4); sfx.unlock(); haptic('unlock');
   } else if (nt > topReached) { topReached = nt; drawLadder(); }
   if (combo >= 2) { floatText(x + T.r * 0.6, y - T.r * 0.9, 'x' + combo, 18 + Math.min(combo, 6) * 3, '#ffd23f', 0.9); shake = Math.max(shake, Math.min(3 + combo * 2, 14)); floats = floats.filter(f => !f.combo); const f = floatText(WW / 2, JT + 80, 'COMBO x' + combo, 24 + Math.min(combo, 6) * 3, '#ffffff'); f.combo = true; }
   if (T.grok) { flash = 0.7; shake = 16; sfx.grok(); particles.push({ type: 'shock', x, y, r: 420, life: 0, max: 0.9, color: '#ffffff' }); burst(x, y, '#ffffff', 50, 520, 3.5); }
@@ -809,7 +873,7 @@ function startFinale(a, b, x, y, mult) {
     o.dead = true; }
   a.dead = b.dead = true; bots = bots.filter(o => !o.dead);
   finale = { base: pts, labels: [], slot: 0, slotT: new Array(RING_N).fill(-9), shown: 0, t: 0, x: cx, y: cy, gx: [a.x, b.x], gy: [a.y, b.y], ga: [a.a, b.a], sw, bonus: 0, boomed: false };
-  aiming = false; dangerT = 0; shake = 6; sfx.singularity(); 
+  aiming = false; dangerT = 0; shake = 6; sfx.singularity(); haptic('singularity'); 
 }
 function updateFinale(dt) {
   const F = finale; F.t += dt;
@@ -916,11 +980,11 @@ function drop() {
   const b = makeBot(curTier, clampAim(aimX), DROP_Y, 0); b.vy = 120; react(b, 'happy', 0.7); b.pop = 0.5;
   bots.push(b);
   curTier = nextTier; nextTier = randTier(); drawNext();
-  dropCD = 0.42; readyAnim = 0; sfx.drop();
+  dropCD = 0.42; readyAnim = 0; sfx.drop(); haptic('drop');
   return true;
 }
 function gameOver() {
-  state = 'over'; sfx.over(); shake = 10; aiming = false;
+  state = 'over'; sfx.over(); haptic('over'); shake = 10; aiming = false;
   const isBest = !tainted && score >= best && score > 0;
   if (!tainted && score > best) { best = score; store(BEST_KEY, best); }
   const list = bots.slice().sort((a, b) => a.y - b.y);
@@ -1033,6 +1097,7 @@ canvas.addEventListener('pointerup', e => { e.preventDefault(); endPointer(e, fa
 canvas.addEventListener('pointercancel', e => endPointer(e, true));
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 muteBtn.addEventListener('click', e => { e.preventDefault(); ensureAudio(); setMuted(!muted); });
+{ const vb = document.getElementById('vibeBtn'); if (!canVibe) vb.style.display = 'none'; vb.addEventListener('click', e => { e.preventDefault(); setVibe(!vibeOn); if (vibeOn) haptic('drop'); }); }
 pauseBtn.addEventListener('click', e => { e.preventDefault(); ensureAudio(); sfx.click(); if (state === 'editor') { physPaused = !physPaused; updateEditorUI(); } else setPaused(state !== 'paused'); });
 $('secretP').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openCode(); });
 $('codeOk').addEventListener('click', e => { e.preventDefault(); submitCode(); });
@@ -1056,6 +1121,7 @@ window.addEventListener('keydown', e => {
   else if (k === 'ArrowRight' || k === 'd' || k === 'D') aimX = clampAim(aimX) + 18;
   else if (k === ' ' || k === 'Enter' || k === 'ArrowDown') { ensureAudio(); if (state === 'over') restart(); else drop(); }
   else if (k === 'm' || k === 'M') setMuted(!muted);
+  else if (k === 'v' || k === 'V') setVibe(!vibeOn);
   else return;
   e.preventDefault();
 });
@@ -1441,7 +1507,7 @@ function updateInteraction(dt) {
       const dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy) || 1;
       const px = A.x + dx / d * (A.r * 0.9), py = A.y + dy / d * (A.r * 0.9) - A.r * 0.2;
       burst(px, py, '#ffffff', 8, 140, 2); ring(px, py, 10, '#ffffff', 0.3); floatText(px, py - 14, 'slap!', 13, '#ffffff', 0.7);
-      sfx.slap(); react(B, Math.random() < 0.5 ? 'shock' : 'annoyed', 1.0); B.pop = 0.4; shake = Math.max(shake, 2);
+      sfx.slap(); haptic('slap'); react(B, Math.random() < 0.5 ? 'shock' : 'annoyed', 1.0); B.pop = 0.4; shake = Math.max(shake, 2);
       wake(B); B.vx += dx / d * 55; B.vy -= 45; B.w += (dx > 0 ? 1 : -1) * 0.8; }
     if (I.hit) react(B, B.expr === 'shock' || B.expr === 'annoyed' ? B.expr : 'annoyed', 0.4); }
   if (I.t >= I.dur) { A.wink = 0; inter = null; }
@@ -1501,7 +1567,8 @@ function frame(now) {
   if (!frozen) {
     if (!(state === 'editor' && physPaused)) {
       acc += dt; let n = 0;
-      while (acc >= STEP && n < 6) { step(STEP); acc -= STEP; n++; }
+      const fs = performance.now();
+      while (acc >= STEP && n < 6) { step(STEP); acc -= STEP; n++; if (performance.now() - fs > 14) { acc = Math.min(acc, STEP); break; } }   // time budget: stay responsive under extreme load
       if (n >= 6) acc = 0;
     } else { acc = 0; for (const b of bots) updateWorld(b); }
     update(dt);
@@ -1514,7 +1581,7 @@ function frame(now) {
 // ================================================================ boot
 bestEl.textContent = best;
 buildPalette();
-setMuted(muted);
+setMuted(muted); setVibe(vibeOn);
 resize();
 restart();
 requestAnimationFrame(t => { last = t; frame(t); });
@@ -1530,7 +1597,7 @@ window.GrokDrop = {
   contactPairs() { const out = new Set(); for (let k = 0; k < ccount; k++) { const C = cpool[k]; if (C.b && C.lam > 0) out.add(Math.min(C.a.id, C.b.id) + '-' + Math.max(C.a.id, C.b.id)); } return [...out]; },
   landingY, step: dt => step(dt || STEP), collisionInfo: () => TIERS.map(T => ({ name: T.name, verts: T.N, parts: T.parts.length })),
   get current() { return curTier; }, set current(t) { curTier = t; drawNext(); },
-  get finale() { return finale; }, get finEnd() { return finEnd; }, get interaction() { return inter; }, set interactions(v) { interOn = v; if (!v) inter = null; }, interact(kind) { inter = pickInteraction(kind); return !!inter; },
+  get finale() { return finale; }, physStats, haptic, get vibe() { return vibeOn; }, set vibe(v) { setVibe(v); }, canVibe, get finEnd() { return finEnd; }, get interaction() { return inter; }, set interactions(v) { interOn = v; if (!v) inter = null; }, interact(kind) { inter = pickInteraction(kind); return !!inter; },
   restart, pause: setPaused, TIERS, world: { WW, WH, JL, JR, JT, JB, DANGER, DROP_Y },
 };
 })();
