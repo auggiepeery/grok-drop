@@ -99,6 +99,7 @@
 </head>
 <body>
 <canvas id="bg"></canvas>
+<canvas id="fx" style="position:fixed;inset:0;width:100%;height:100%;z-index:40;pointer-events:none;display:block"></canvas>
 <div id="app">
   <div id="hud" class="panel">
     <div class="title">GROK DRO<span id="secretP">P</span><small>MERGE THE BOTS</small></div>
@@ -186,6 +187,9 @@ const TIERS = [
   { name: 'Grok',   shape: 'pebble',   r: 110, c: '#0b0b0d', grok: true, mouth: 'smug', lid: 0.2, brow: 0, blushy: 0 }, // cool
 ];
 const TOP = TIERS.length - 1;
+// per-tier rolling: [slow damp/substep, fast damp/substep, spin cap k (x v/r), cap offset]. Was 0.97 / 0.993 / 1.2 / 0.5 for everyone.
+const ROUNDISH = new Set(['circle', 'pill', 'hexagon', 'cloud', 'flower', 'pebble']);
+const ROLL = TIERS.map(T => ROUNDISH.has(T.shape) ? [0.99, 0.999, 2.3, 1.8] : [0.98, 0.996, 1.5, 0.9]);
 const POINTS = [1, 3, 6, 10, 15, 21, 28, 36, 45, 55];
 const SPAWN_W = [30, 26, 20, 14, 10];
 
@@ -712,8 +716,9 @@ function step(dt) {
       if (w > 25) w = 25; else if (w < -25) w = -25;
       // settle: gently bleed off creeping motion. Anything on a slope steeper than ~2 degrees
       // accelerates past this threshold within a few substeps, so nothing sticks on slopes.
-      if (b.nc) w *= (vx * vx + vy * vy < 900) ? 0.97 : 0.993;   // rolling resistance; slow spinners stop fast
-      if (b.nc) { const mw = Math.hypot(vx, vy) / b.r * 1.2 + 0.5; if (w > mw) w = mw; else if (w < -mw) w = -mw; }  // no slip-spin in contact
+      const RL = ROLL[b.t];   // round-ish bots roll & tumble more; angular-only, friction unchanged
+      if (b.nc) w *= (vx * vx + vy * vy < 400) ? RL[0] : RL[1];   // rolling resistance; slow spinners still stop
+      if (b.nc) { const mw = Math.hypot(vx, vy) / b.r * RL[2] + RL[3]; if (w > mw) w = mw; else if (w < -mw) w = -mw; }  // limited slip-spin in contact
       b.vx = vx; b.vy = vy; b.w = w;
     }
     solveVelocities(h);
@@ -796,16 +801,15 @@ let finale = null;
 const FIN_T = 3.6, FIN_BOOM = 3.1;
 function startFinale(a, b, x, y, mult) {
   const pts = Math.round(5000 * mult); addScore(pts);
-  floatText(x, y - 60, '+' + pts, 34, '#ffffff', 1.4);
-  const cx = Math.max(JL + 90, Math.min(JR - 90, x)), cy = Math.max(JT + 120, Math.min(JB - 120, y));
+  const cx = Math.max(JL + 140, Math.min(JR - 140, x)), cy = Math.max(JT + 170, Math.min(JB - 150, y));
   const sw = [];
   for (const o of bots) { if (o === a || o === b || o.dead) continue;
     const d = Math.hypot(o.x - cx, o.y - cy);
     sw.push({ t: o.t, x: o.x, y: o.y, a: o.a, r: o.r, ang: Math.atan2(o.y - cy, o.x - cx), d0: Math.max(d, 1), start: 0.45 + Math.min(1.3, d / 450) + Math.random() * 0.25, done: false, spin: 0 });
     o.dead = true; }
   a.dead = b.dead = true; bots = bots.filter(o => !o.dead);
-  finale = { t: 0, x: cx, y: cy, gx: [a.x, b.x], gy: [a.y, b.y], ga: [a.a, b.a], sw, bonus: 0, boomed: false };
-  aiming = false; dangerT = 0; shake = 6; sfx.singularity(); toast('SINGULARITY');
+  finale = { base: pts, labels: [], slot: 0, slotT: new Array(RING_N).fill(-9), shown: 0, t: 0, x: cx, y: cy, gx: [a.x, b.x], gy: [a.y, b.y], ga: [a.a, b.a], sw, bonus: 0, boomed: false };
+  aiming = false; dangerT = 0; shake = 6; sfx.singularity(); 
 }
 function updateFinale(dt) {
   const F = finale; F.t += dt;
@@ -817,7 +821,7 @@ function updateFinale(dt) {
     s.ang += dt * (1.5 + 7 * e); s.spin += dt * (2 + 10 * e);
     s.x = F.x + Math.cos(s.ang) * d; s.y = F.y + Math.sin(s.ang) * d * 0.85; s.sc = 1 - e * 0.95;
     if (k >= 1) { s.done = true; const bonus = POINTS[s.t] * 20; F.bonus += bonus; addScore(bonus);
-      floatText(F.x + (Math.random() - 0.5) * 80, F.y - 40 - Math.random() * 40, '+' + bonus, 15 + s.t, TIERS[s.t].grok ? '#ffffff' : TIERS[s.t].c, 0.9);
+      finLabel(F, '+' + bonus, TIERS[s.t].grok ? '#ffffff' : TIERS[s.t].c);
       burst(F.x, F.y, TIERS[s.t].grok ? '#ffffff' : TIERS[s.t].c, 5, 120, 2); sfx.suck(s.t); }
   }
   if (!F.boomed && F.t >= FIN_BOOM) {
@@ -826,17 +830,55 @@ function updateFinale(dt) {
     particles.push({ type: 'shock', x: F.x, y: F.y, r: 480, life: 0, max: 0.8, color: '#a78bfa' });
     burst(F.x, F.y, '#ffffff', 90, 700, 4); burst(F.x, F.y, '#ffb347', 40, 500, 3); burst(F.x, F.y, '#8b5cf6', 40, 450, 3);
     for (const s of F.sw) if (!s.done) { s.done = true; const bonus = POINTS[s.t] * 20; F.bonus += bonus; addScore(bonus); }
-    const f = floatText(WW / 2, JT + 170, 'SINGULARITY BONUS +' + (F.bonus + 0), 26, '#ffd23f', 2.4); f.banner = true;
+    finEnd = { t: 0, total: F.base + F.bonus, x: F.x, y: F.y };
   }
+  for (const L of F.labels) L.life += dt; F.labels = F.labels.filter(L => L.life < L.max);
+  F.shown += (F.base + F.bonus - F.shown) * Math.min(1, dt * 10);   // running tally rolls up
   if (F.t >= FIN_T) { finale = null; dropCD = 0.2; readyAnim = 0; }
+}
+// finale labels: fixed ring slots around the hole, a slot is reused only after its label expired -> no overlaps
+const RING_N = 10, RING_R = 128;
+function finLabel(F, text, color) {
+  let best = -1, bt = Infinity;
+  for (let i = 0; i < RING_N; i++) { const k = (F.slot + i) % RING_N; if (F.t - F.slotT[k] > 0.95) { best = k; break; } if (F.slotT[k] < bt) { bt = F.slotT[k]; best = k; } }
+  F.slot = (best + 3) % RING_N; F.slotT[best] = F.t;   // hop around the ring
+  F.labels = F.labels.filter(L => L.slot !== best);
+  const a = -Math.PI / 2 + (best + 0.5) / RING_N * TAU;
+  F.labels.push({ text, color, slot: best, x: F.x + Math.cos(a) * RING_R, y: F.y + Math.sin(a) * RING_R * 0.92, life: 0, max: 0.9 });
+}
+let finEnd = null, fxDirty = false;
+const fxC = document.getElementById('fx'), fxx = fxC.getContext('2d');
+function fxText(c, text, x, y, size, color, alpha = 1) {
+  c.globalAlpha = alpha; c.font = `900 ${size}px system-ui,-apple-system,sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.lineWidth = Math.max(3, size * 0.16); c.strokeStyle = 'rgba(0,0,0,.85)'; c.strokeText(text, x, y);
+  c.shadowColor = 'rgba(255,255,255,.6)'; c.shadowBlur = 8; c.fillStyle = color; c.fillText(text, x, y); c.shadowBlur = 0; c.globalAlpha = 1;
+  return c.measureText(text).width;
+}
+// full-viewport overlay above every panel: darkening, warp ripples, flash; hole, swirl, swallowed bots and numbers drawn on top
+function renderFx(dt, sx, sy) {
+  const active = finale || finEnd;
+  if (!active) { if (fxDirty) { fxx.setTransform(1, 0, 0, 1, 0, 0); fxx.clearRect(0, 0, fxC.width, fxC.height); fxDirty = false; } return; }
+  fxDirty = true;
+  if (finEnd && dt > 0) { finEnd.t += dt; if (finEnd.t > 2.2) finEnd = null; }
+  const c = fxx, dpr = fxC.width / innerWidth, rect = canvas.getBoundingClientRect(), sc = view.scale;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, fxC.width, fxC.height);
+  let dark = 0; const since = finale ? finale.t : FIN_BOOM + (finEnd ? finEnd.t : 9);
+  dark = since < FIN_BOOM ? 0.82 * Math.min(1, since / 0.7) : 0.82 * Math.max(0, 1 - (since - FIN_BOOM) / 0.9);   // ramps in, holds, fades out after the flash
+  if (dark > 0) { c.fillStyle = `rgba(2,0,8,${dark})`; c.fillRect(0, 0, fxC.width, fxC.height); }
+  c.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (rect.left + view.ox + sx * sc), dpr * (rect.top + view.oy + sy * sc));
+  if (finale) drawFinale(c);
+  if (finEnd) { const k = finEnd.t / 2.2, pop = k < 0.08 ? 0.6 + k / 0.08 * 0.5 : 1.1 - Math.min(0.1, k), al = k > 0.75 ? (1 - k) / 0.25 : 1;
+    fxText(c, 'SINGULARITY', WW / 2, JT + 150 - k * 20, 34 * pop, '#ffffff', al);
+    fxText(c, 'BONUS +' + finEnd.total, WW / 2, JT + 195 - k * 20, 26 * pop, '#ffd23f', al); }
+  if (flash > 0) { c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = `rgba(255,255,255,${flash * 0.55})`; c.fillRect(0, 0, fxC.width, fxC.height); }
 }
 function drawFinale(c) {
   const F = finale, t = F.t, pre = Math.min(1, t / FIN_BOOM);
   if (t < FIN_BOOM) {
     // darken + warp ripples
-    c.save(); c.fillStyle = `rgba(2,0,8,${0.55 * Math.min(1, t / 0.8)})`; c.fillRect(-200, -200, WW + 400, WH + 400);
+    c.save();
     c.translate(F.x, F.y);
-    for (let i = 0; i < 6; i++) { const rr = ((i / 6 + t * 0.55) % 1); const R = 420 * (1 - rr);
+    for (let i = 0; i < 9; i++) { const rr = ((i / 9 + t * 0.55) % 1); const R = 1100 * (1 - rr);
       c.strokeStyle = `rgba(167,139,250,${0.18 * rr})`; c.lineWidth = 2; c.beginPath(); c.ellipse(0, 0, R, R * 0.85, t * 0.6, 0, TAU); c.stroke(); }
     // swirl streaks
     c.rotate(t * 2.2);
@@ -861,10 +903,13 @@ function drawFinale(c) {
     c.shadowColor = 'rgba(255,170,90,.9)'; c.shadowBlur = 24; c.fillStyle = '#000'; c.beginPath(); c.arc(0, 0, R, 0, TAU); c.fill(); c.shadowBlur = 0;
     c.strokeStyle = 'rgba(255,230,190,.85)'; c.lineWidth = 1.5; c.beginPath(); c.arc(0, 0, R * 1.04, 0, TAU); c.stroke();
     c.restore();
-  } else {
-    const k = (t - FIN_BOOM) / (FIN_T - FIN_BOOM);
-    c.fillStyle = `rgba(2,0,8,${0.55 * (1 - k)})`; c.fillRect(-200, -200, WW + 400, WH + 400);
   }
+  // numbers: running tally above the hole + ring-slotted per-bot bonuses (never overlapping)
+  if (t < FIN_BOOM) {
+    fxText(c, 'SINGULARITY', F.x, F.y - RING_R - 70, 26, '#ffffff', Math.min(1, t * 3));
+    fxText(c, '+' + Math.round(F.shown), F.x, F.y - RING_R - 40, 24, '#ffd23f', Math.min(1, t * 3));
+  }
+  for (const L of F.labels) { const k = L.life / L.max; L.w = fxText(c, L.text, L.x, L.y - k * 10, 17, L.color, k > 0.7 ? (1 - k) / 0.3 : 1); L.h = 17; L.dy = k * 10; }
 }
 function drop() {
   if (!canDrop()) return false;
@@ -894,7 +939,7 @@ function gameOver() {
   }, 650 + Math.min(list.length, 30) * 40);
 }
 function restart() {
-  bots = []; particles = []; floats = []; finale = null; interT = 3; inter = null;
+  bots = []; particles = []; floats = []; finale = null; finEnd = null; interT = 3; inter = null;
   score = 0; dangerT = 0; combo = 0; comboT = 9; shake = 0; flash = 0; aiming = false; dropCD = 0.2; topReached = 0;
   curTier = randTier() % 3; nextTier = randTier();
   scoreEl.textContent = '0'; bestEl.textContent = best;
@@ -1190,6 +1235,7 @@ function drawBg(dt) {
 
 // ================================================================ rendering: jar + game
 function resize() {
+  fxC.width = Math.max(1, Math.round(innerWidth * Math.min(devicePixelRatio || 1, 3))); fxC.height = Math.max(1, Math.round(innerHeight * Math.min(devicePixelRatio || 1, 3))); fxDirty = true;
   const rect = canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 3);
   view.dpr = dpr; view.w = rect.width; view.h = rect.height;
   canvas.width = Math.max(1, Math.round(rect.width * dpr)); canvas.height = Math.max(1, Math.round(rect.height * dpr));
@@ -1302,7 +1348,6 @@ function render(dt) {
       blink: b.blinkT > 0 && ex !== 'shock' ? 1 : 0, happy: b.happy > 0 ? 1 : 0, expr: ex, wink: b.wink, blush: b.blush, sweat: nv > 0.35 ? nv : 0, t: time + b.id });
   }
   drawInteraction(c);
-  if (finale) drawFinale(c);
   drawJarFront(c);
   if (state === 'editor' && hoverW && edTool === 'place') {
     const T = TIERS[edTier]; c.save(); c.translate(hoverW.x, hoverW.y); c.scale(T.r, T.r); c.setLineDash([4 / T.r, 3 / T.r]);
@@ -1331,7 +1376,8 @@ function render(dt) {
     c.shadowColor = 'rgba(255,255,255,.7)'; c.shadowBlur = 10; c.fillStyle = f.color; c.fillText(f.text, f.x, f.y - k * 40); c.shadowBlur = 0;
   }
   c.globalAlpha = 1;
-  if (flash > 0) { c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = `rgba(255,255,255,${flash * 0.45})`; c.fillRect(0, 0, canvas.width, canvas.height); }
+  if (flash > 0 && !finale && !finEnd) { c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = `rgba(255,255,255,${flash * 0.45})`; c.fillRect(0, 0, canvas.width, canvas.height); }
+  renderFx(dt, sx, sy);
 }
 function blinkAt(t, seed) { const p = (t + seed) % 3.7; return p < 0.12 ? 1 : 0; }
 function drawNext() {
@@ -1484,7 +1530,7 @@ window.GrokDrop = {
   contactPairs() { const out = new Set(); for (let k = 0; k < ccount; k++) { const C = cpool[k]; if (C.b && C.lam > 0) out.add(Math.min(C.a.id, C.b.id) + '-' + Math.max(C.a.id, C.b.id)); } return [...out]; },
   landingY, step: dt => step(dt || STEP), collisionInfo: () => TIERS.map(T => ({ name: T.name, verts: T.N, parts: T.parts.length })),
   get current() { return curTier; }, set current(t) { curTier = t; drawNext(); },
-  get finale() { return finale; }, get interaction() { return inter; }, set interactions(v) { interOn = v; if (!v) inter = null; }, interact(kind) { inter = pickInteraction(kind); return !!inter; },
+  get finale() { return finale; }, get finEnd() { return finEnd; }, get interaction() { return inter; }, set interactions(v) { interOn = v; if (!v) inter = null; }, interact(kind) { inter = pickInteraction(kind); return !!inter; },
   restart, pause: setPaused, TIERS, world: { WW, WH, JL, JR, JT, JB, DANGER, DROP_Y },
 };
 })();
