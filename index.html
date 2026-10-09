@@ -458,14 +458,14 @@ function addScore(n) {
 }
 
 // ================================================================ physics (rigid bodies, real shapes)
-// XPBD-style rigid body solver (Müller et al. 2020): substeps, positional contact projection with
-// static friction, then velocity pass for dynamic friction. Contacts come from SAT + face clipping
+// XPBD-style rigid body solver (Müller et al. 2020): substeps, positional contact projection,
+// then a velocity pass for friction and restitution 0. Contacts come from SAT + face clipping
 // between convex parts, and outline vertices vs the jar's walls/floor/ceiling.
 const SUB = 3;                 // substeps per 1/120 s step  -> h = 1/360 s
 const CEIL = 2;                // invisible ceiling y
 const SLOP = 0.5;              // contact detection margin (world units)
 const MERGE_GAP = 0.6;         // same-tier bots merge when within this distance (i.e. touching)
-const MU_S = 0.55, MU_D = 0.35;
+const MU_D = 0.6;               // friction (velocity level; positional static friction ratcheted bots up walls)
 const PUSH_FREE = 1.0;         // overlap beyond this is resolved without injecting velocity
 let physPaused = false;        // editor: freeze physics
 const cpool = []; let ccount = 0;
@@ -609,7 +609,7 @@ function collide(merges) {
 }
 function solvePositions() {
   for (let k = 0; k < ccount; k++) {
-    const C = cpool[k], A = C.a, B = C.b; if (A.dead || (B && B.dead)) { C.lam = 0; continue; }
+    const C = cpool[k], A = C.a, B = C.b; if (A.dead || (B && B.dead)) continue;
     let ca = Math.cos(A.a), sa = Math.sin(A.a);
     let rax = C.ax * ca - C.ay * sa, ray = C.ax * sa + C.ay * ca;
     let rbx = 0, rby = 0, pbx = C.bx, pby = C.by, cb = 1, sb = 0;
@@ -623,20 +623,6 @@ function solvePositions() {
     const f = d > PUSH_FREE ? (d - PUSH_FREE) / d : 0;
     applyPos(A, -dl * nx, -dl * ny, rax, ray, f);
     if (B) applyPos(B, dl * nx, dl * ny, rbx, rby, f);
-    // static friction: undo tangential slip of the contact points during this substep
-    ca = Math.cos(A.a); sa = Math.sin(A.a); rax = C.ax * ca - C.ay * sa; ray = C.ax * sa + C.ay * ca;
-    const cpa = Math.cos(A.pa), spa = Math.sin(A.pa);
-    let dx = (A.x + rax) - (A.px + C.ax * cpa - C.ay * spa), dy = (A.y + ray) - (A.py + C.ax * spa + C.ay * cpa);
-    if (B) {
-      cb = Math.cos(B.a); sb = Math.sin(B.a); rbx = C.bx * cb - C.by * sb; rby = C.bx * sb + C.by * cb;
-      const cpb = Math.cos(B.pa), spb = Math.sin(B.pa);
-      dx -= (B.x + rbx) - (B.px + C.bx * cpb - C.by * spb); dy -= (B.y + rby) - (B.py + C.bx * spb + C.by * cpb);
-    }
-    const dn = dx * nx + dy * ny; dx -= dn * nx; dy -= dn * ny;
-    const len = Math.hypot(dx, dy); if (len < 1e-9) continue;
-    const tx = dx / len, ty = dy / len, cta = rax * ty - ray * tx, ctb = rbx * ty - rby * tx;
-    const wta = A.im + A.iI * cta * cta, wtb = B ? B.im + B.iI * ctb * ctb : 0, dlt = len / (wta + wtb);
-    if (dlt < MU_S * dl) { applyPos(A, -dlt * tx, -dlt * ty, rax, ray, 0); if (B) applyPos(B, dlt * tx, dlt * ty, rbx, rby, 0); }
   }
 }
 function applyPos(b, px, py, rx, ry, f) {
@@ -688,7 +674,7 @@ function step(dt) {
       updateWorld(b);
     }
     collide(merges);
-    solvePositions();
+    solvePositions(); solvePositions();   // 2 Gauss-Seidel passes per substep
     for (const b of bots) {
       if (b.dead) continue;
       let vx = (b.x - b.px) / h, vy = (b.y - b.py) / h, w = (b.a - b.pa) / h;
