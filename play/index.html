@@ -554,7 +554,8 @@ const sfx = {
     noise(0.05, 2000 + tier * 300, 0.08);
     if (TIERS[tier] && TIERS[tier].luna) { [1046, 1568, 2093].forEach((f, j) => tone(f, f, 1.1 - j * 0.2, 'sine', 0.06 - j * 0.012, j * 0.05)); tone(523, 523, 1.2, 'triangle', 0.03); }   // Luna: soft bell
   },
-  shake() { noise(0.7, 120, 0.22, 'lowpass', 380); tone(55, 42, 0.7, 'sine', 0.25); [0, 0.2, 0.4].forEach(d => tone(90, 60, 0.15, 'triangle', 0.08, d)); },
+  shake() { noise(1.3, 90, 0.32, 'lowpass', 260); noise(1.1, 400, 0.08, 'bandpass', 900); tone(48, 30, 1.2, 'sine', 0.35); tone(72, 40, 1.0, 'sawtooth', 0.05); },
+  thump(f = 1) { tone(110, 38, 0.18, 'sine', 0.3 * f); noise(0.12, 200, 0.12 * f, 'lowpass', 500); },
   drop() { tone(520, 300, 0.09, 'triangle', 0.1); tone(900, 1200, 0.05, 'sine', 0.04, 0.02); },
   tick(v) { const now = performance.now(); if (now - lastTick < 70) return; lastTick = now; tone(700 + Math.random() * 300, 380, 0.04, 'sine', Math.min(0.09, v / 5000)); },
   slap() { noise(0.08, 2600, 0.35, 'highpass'); tone(320, 140, 0.07, 'triangle', 0.12); },
@@ -593,7 +594,7 @@ const canVibe = typeof navigator !== 'undefined' && typeof navigator.vibrate ===
 let vibeOn = true; try { vibeOn = localStorage.getItem(VIBE_KEY) !== '0'; } catch (e) {}
 let lastVibe = 0, lastVibeTick = 0, vibeBusyUntil = 0;
 const HAPTIC = {
-  shake: () => [40, 40, 50, 40, 60, 40, 50],
+  shake: () => [120, 40, 110, 40, 100, 40, 90, 50, 80, 60, 60, 70, 40],
   drop: () => 12,
   merge: t => t >= 7 ? [18 + t * 4, 35, 12 + t * 3] : 8 + t * 4,     // stronger / longer with tier
   tick: () => 6,
@@ -654,7 +655,7 @@ const SLEEP_V = 10, SLEEP_W = 0.2, SLEEP_T = 0.3;  // settled bots fall asleep (
 const SPAWN_FX = 0.15, SPREAD_T = 0.35, SPREAD_CAP = 0.3, SPREAD_W = 0.25;   // merge spawn: visual pop time, push-out window, per-pass cap (u), new-bot mobility
 const FACE_COS = 0.9986, WALL_BAND = 0.5, MASS_RATIO = 2, POS_ITERS = 12, PAIR_CAP = 24;
 const PUSH_FREE = 0.0;           // overlap beyond this is resolved without injecting velocity
-const SHAKE_MAX = 3, SHAKE_T = 0.6, SHAKE_CALM = 1.5, SHAKE_ZEN_CD = 2.5;
+const SHAKE_MAX = 3, SHAKE_T = 1.1, SHAKE_CALM = 2.0, SHAKE_ZEN_CD = 2.5, SHAKE_KICKS = 6, SHAKE_GAP = 0.16, SHAKE_MAX_UP = 1000;
 let shakeCharges = 1, shakeT = 0, shakeCalm = 0, shakeCD = 0, shakePulse = 0, shakeDir = 1;
 let physPaused = false, runId = 0, escapes = 0, dangerOver = false;   // runId: stale game-over timers from an earlier run are ignored        // editor: freeze physics
 const cpool = []; let ccount = 0;
@@ -939,14 +940,14 @@ function solveVelocities(h) {
     const vn = rvx * nx + rvy * ny;
     let pvx = A.ovx - A.ow * ray, pvy = A.ovy + A.ow * rax;
     if (B) { pvx -= B.ovx - B.ow * rby; pvy -= B.ovy + B.ow * rbx; }
-    const vnPre = pvx * nx + pvy * ny, bounce = vnPre > BOUNCE_MIN && (A.air || (B && B.air)) ? REST * vnPre : 0;  // only fresh impacts bounce
+    const vnPre = pvx * nx + pvy * ny, bounce = vnPre > BOUNCE_MIN && (A.air || (B && B.air) || shakeT > 0) ? (shakeT > 0 ? 0.4 : REST) * vnPre : 0;  // only fresh impacts bounce
     let tx = rvx - vn * nx, ty = rvy - vn * ny; const vt = Math.hypot(tx, ty);
     // dynamic friction
     if (vt > 1e-6) {
       tx /= vt; ty /= vt;
       const cta = rax * ty - ray * tx, ctb = rbx * ty - rby * tx;
       const w = A.im + A.iI * cta * cta + (B ? B.im + B.iI * ctb * ctb : 0);
-      const p = Math.min(MU_D * C.lam / h, vt / w);
+      const p = Math.min((shakeT > 0 ? 0.12 : MU_D) * C.lam / h, vt / w);   // shake: the pile 'liquefies' (low friction) so it really reshuffles
       applyVel(A, -p * tx, -p * ty, rax, ray); if (B) applyVel(B, p * tx, p * ty, rbx, rby);
     }
     // restitution 0 (XPBD velocity step): cancel the relative normal velocity at an active contact,
@@ -979,24 +980,31 @@ function doShake() {
 }
 // three alternating side-to-side pulses (t = 0, 0.2, 0.4 s): impulses mostly sideways + a little up, scaled ~1/size so small
 // buried bots move more. Velocities stay far under MAX_UP / MAX_V; the per-step containment clamp keeps everything in the jar.
-function shakeKick() {
-  const dir = shakeDir * (shakePulse % 2 ? -1 : 1);
+function shakeKick() {   // 6 alternating hard jolts with real upward pops; size scaling kept but shallow (big bots rock too)
+  const dir = shakeDir * (shakePulse % 2 ? -1 : 1), fade = 1 - 0.1 * shakePulse, up = shakePulse % 2 === 0 ? 1 : 0.55;
   for (const b of bots) {
-    if (b.dead) continue; wake(b); const k = Math.min(1.6, Math.pow(20 / b.r, 0.7));
-    b.vx += dir * (90 + Math.random() * 70) * k + (Math.random() - 0.5) * 30 * k;
-    b.vy -= (50 + Math.random() * 60) * k; b.w += (Math.random() - 0.5) * 1.5 * k;
-    if (b.vy < -360) b.vy = -360;
+    if (b.dead) continue; wake(b); const k = Math.min(1.7, Math.pow(24 / b.r, 0.38));
+    // per-bot direction + lift (a uniform push just slides the packed pile as one block and back): neighbours move
+    // relative to each other, so the pile lifts, tumbles and reshuffles
+    b.vx += (dir * 0.8 + (Math.random() - 0.5) * 0.9) * 420 * k * fade;
+    b.vy -= (0.6 + 0.4 * Math.random()) * 340 * k * fade * up;   // near-uniform pop: the whole pile lifts (lighter gravity) and rains back down
+    b.w += (Math.random() - 0.5) * 9 * k;
+    if (b.vy < -900) b.vy = -900;
   }
+  // dust + sparks off the floor and walls, screen jolt
+  for (let i = 0; i < 6; i++) burst(JL + Math.random() * (JR - JL), JB - 2, i % 2 ? '#d8cfbf' : '#ffffff', 3, 160, 2.2);
+  burst(dir > 0 ? JR - 2 : JL + 2, JB - 60 - Math.random() * 200, '#ffd9a0', 6, 200, 2);
+  shake = Math.max(shake, 16 * fade); sfx.thump && sfx.thump(fade);
   shakePulse++;
 }
 function shakeTick(dt) {
   if (shakeCD > 0) { shakeCD = Math.max(0, shakeCD - dt); if (shakeCD === 0) updateShakeUI(); }
   if (shakeCalm > 0) shakeCalm = Math.max(0, shakeCalm - dt);
-  if (shakeT > 0) { const el = SHAKE_T - shakeT; if (shakePulse < 3 && el >= shakePulse * 0.2) shakeKick(); shakeT = Math.max(0, shakeT - dt); for (const b of bots) wake(b); }
+  if (shakeT > 0) { const el = SHAKE_T - shakeT; if (shakePulse < SHAKE_KICKS && el >= shakePulse * SHAKE_GAP) shakeKick(); shakeT = Math.max(0, shakeT - dt); for (const b of bots) wake(b); }
 }
-function shakeWobble() {   // stage wobble: ~0.6 s side to side with a slight rotation (drawing only)
-  if (shakeT <= 0) return null; const p = 1 - shakeT / SHAKE_T, env = Math.sin(Math.PI * p);
-  return { x: Math.sin(p * Math.PI * 6) * 9 * env * shakeDir, rot: Math.sin(p * Math.PI * 6 + 0.6) * 0.022 * env * shakeDir };
+function shakeWobble() {   // decaying earthquake: big side-to-side, rotation, vertical bounce (drawing only)
+  if (shakeT <= 0) return null; const p = 1 - shakeT / SHAKE_T, env = Math.min(1, p * 8) * Math.pow(1 - p, 1.3), w = p * Math.PI * 11;
+  return { x: Math.sin(w) * 24 * env * shakeDir, y: -Math.abs(Math.sin(w * 1.5 + 0.4)) * 9 * env, rot: Math.sin(w + 0.6) * 0.06 * env * shakeDir };
 }
 function sleepBody(b) { b.sleep = true; b.vx = b.vy = b.w = 0; b.im = 0; b.iI = 0; }
 
@@ -1019,7 +1027,8 @@ function step(dt) {
       b.px = b.x; b.py = b.y; b.pa = b.a;
       if (b.sleep) continue;
       b.ovx = b.vx; b.ovy = b.vy; b.ow = b.w;
-      b.vx += G * gx * h; b.vy += G * gy * h; b.vx *= 0.9997; b.vy *= 0.9997; b.w *= 0.9985;
+      const gk = shakeT > 0.15 ? 0.55 : 1;   // shake: lighter gravity while jolting -> the pile floats, tumbles, reshuffles
+      b.vx += G * gk * gx * h; b.vy += G * gk * gy * h; b.vx *= 0.9997; b.vy *= 0.9997; b.w *= 0.9985;
       b.x += b.vx * h; b.y += b.vy * h; b.a += b.w * h;
       updateWorld(b);
     }
@@ -1031,7 +1040,7 @@ function step(dt) {
       let vx = (b.x - b.px) / h, vy = (b.y - b.py) / h, w = (b.a - b.pa) / h;
       const sp = Math.hypot(vx, vy);
       if (sp > MAX_V) { vx *= MAX_V / sp; vy *= MAX_V / sp; }
-      { const ag = -(vx * gx + vy * gy); if (ag > MAX_UP) { vx += (ag - MAX_UP) * gx; vy += (ag - MAX_UP) * gy; } }   // against-gravity cap
+      { const ag = -(vx * gx + vy * gy); const MU = shakeT > 0 ? SHAKE_MAX_UP : MAX_UP; if (ag > MU) { vx += (ag - MU) * gx; vy += (ag - MU) * gy; } }   // limiter raised only during a shake }   // against-gravity cap
       if (w > 25) w = 25; else if (w < -25) w = -25;
       // settle: gently bleed off creeping motion. Anything on a slope steeper than ~2 degrees
       // accelerates past this threshold within a few substeps, so nothing sticks on slopes.
@@ -1046,7 +1055,8 @@ function step(dt) {
     physStats.contacts = Math.max(physStats.contacts, ccount);
     solveVelocities(h);
     // anti-launch: contacts may bounce a bot back up only as much as restitution allows; spin/friction/pile pressure can't fling it
-    for (const b of bots) { if (b.sleep || b.dead || !b.nc) continue; const up = 30 + 0.15 * Math.max(0, b.vdown), va = -(b.vx * gx + b.vy * gy); if (va > up) { b.vx += (va - up) * gx; b.vy += (va - up) * gy; } }
+    // (skipped during a shake: the jolts are meant to lift the pile; the raised SHAKE_MAX_UP cap still applies)
+    if (shakeT <= 0) for (const b of bots) { if (b.sleep || b.dead || !b.nc) continue; const up = 30 + 0.15 * Math.max(0, b.vdown), va = -(b.vx * gx + b.vy * gy); if (va > up) { b.vx += (va - up) * gx; b.vy += (va - up) * gy; } }
   }
   for (let k = 0; k < merges.length; k += 2) doMerge(merges[k], merges[k + 1]);
   if (merges.length) { bots = bots.filter(b => !b.dead); wakeAll(); }
@@ -1965,7 +1975,7 @@ function render(dt) {
   c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, canvas.width, canvas.height);
   let sx = 0, sy = 0; if (shake > 0) { sx = (Math.random() - 0.5) * shake; sy = (Math.random() - 0.5) * shake; } if (nudge.t > 0) { const k = Math.sin(Math.PI * nudge.t / 0.18); sx += nudge.x * k; sy += nudge.y * k; }
   c.setTransform(v.dpr * v.scale, 0, 0, v.dpr * v.scale, v.dpr * (v.ox + sx * v.scale), v.dpr * (v.oy + sy * v.scale));
-  { const wb = shakeWobble(); if (wb) { c.translate(WW / 2 + wb.x, JB); c.rotate(wb.rot); c.translate(-WW / 2, -JB); } }
+  { const wb = shakeWobble(); if (wb) { c.translate(WW / 2 + wb.x, JB + wb.y); c.rotate(wb.rot); c.translate(-WW / 2, -JB); } }
   drawJarBack(c);
   // dropper rail + aim
   const showAim = state === 'playing' && !modalOpen && !finale, ghostOk = mode !== 'flip' || (gdir === 0 && turnT < 0);
