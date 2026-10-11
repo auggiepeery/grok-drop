@@ -8,7 +8,7 @@
 <title>Grok Drop</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
-  html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none;position:fixed;inset:0}
+  html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:manipulation;position:fixed;inset:0}   /* NOT none: touch-action intersects down the tree, so none here killed the room's native pan-y scroll on iOS; #game keeps none */
   body{font-family:ui-sans-serif,"SF Pro Display","Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;color:#f2f4f8;background:#030305}
   #bg{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0;pointer-events:none}
   #app{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;align-items:stretch;
@@ -84,7 +84,7 @@
   .wishPlaque{display:inline-block;margin-top:6px;padding:3px 10px;border-radius:999px;border:1px solid rgba(255,214,120,.45);background:rgba(255,214,120,.08);color:#ffe0a0;font-size:12px;font-weight:800;letter-spacing:1px}
   .colTitle{font-weight:900;letter-spacing:5px;font-size:18px;text-shadow:0 0 18px rgba(255,255,255,.45)}
   .colSub{font-size:11px;letter-spacing:1.5px;color:rgba(255,255,255,.55);margin-top:4px}
-  #colGrid{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:14px;padding:10px 18px 26px;align-content:start}
+  #colGrid{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:14px;padding:10px 18px 26px;align-content:start}
   .colCard{position:relative;border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.012));border:1px solid rgba(255,255,255,.1);padding:6px 12px 12px;text-align:center;cursor:pointer;transition:transform .25s,border-color .25s,box-shadow .25s;user-select:none;-webkit-user-select:none}
   .colCard.sel{transform:scale(1.04);border-color:rgba(255,255,255,.45);box-shadow:0 0 30px rgba(160,140,255,.25)}
   .colCard canvas{width:100%;aspect-ratio:1/1;display:block;pointer-events:none}
@@ -1702,7 +1702,7 @@ window.addEventListener('keydown', e => {
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
 ['touchstart', 'touchmove', 'touchend'].forEach(t => document.addEventListener(t, e => {
-  if (e.target.closest && e.target.closest('button,input,#secretP,.card')) return;
+  if (e.target.closest && e.target.closest('button,input,#secretP,.card,#collection,#editorBar,.overlay,details')) return;   // the trophy room / editor strip must scroll natively and get taps (this blanket preventDefault was killing them on iOS)
   if (e.cancelable) e.preventDefault();
 }, { passive: false }));
 ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault()));
@@ -2530,7 +2530,11 @@ function buildCollection() {
       if (T.grok && stats.singularities) lines.push('Singularities &times;' + stats.singularities);
     } else lines.push('Not made yet');
     d.insertAdjacentHTML('beforeend', `<div class="nm">${seen ? T.name.toUpperCase() : '???'}</div><div class="meta">${seen ? T.shape.toUpperCase() : '???'} &middot; TIER ${i + 1}</div><div class="desc">${seen ? BIO[i] : '???'}</div><div class="cnt">${lines.join('<br>')}</div>`);
-    d.addEventListener('click', e => { e.preventDefault(); tapCard(i); });
+    let pd = null, lastTap = 0; const fire = () => { const now = performance.now(); if (now - lastTap < 450) return; lastTap = now; tapCard(i); };
+    d.addEventListener('pointerdown', e => { pd = { x: e.clientX, y: e.clientY, t: performance.now(), st: colGrid.scrollTop }; });
+    d.addEventListener('pointerup', e => { if (pd && Math.hypot(e.clientX - pd.x, e.clientY - pd.y) < 12 && performance.now() - pd.t < 500 && Math.abs(colGrid.scrollTop - pd.st) < 4) fire(); pd = null; });   // real tap (touch or mouse), never a scroll
+    d.addEventListener('pointercancel', () => { pd = null; });
+    d.addEventListener('click', () => fire());   // keyboard / synthetic clicks (deduped)
     colGrid.appendChild(d); colCards.push({ el: d, cv, ctx: cv.getContext('2d'), seen, react: null });
   });
   $('colSub').textContent = `${found} / ${TIERS.length} DISCOVERED` + (stats.singularities ? ` · ${stats.singularities} SINGULARIT${stats.singularities === 1 ? 'Y' : 'IES'}` : '');
