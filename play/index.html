@@ -2550,8 +2550,8 @@ function buildCollection() {
 function sizeCollection() { const dpr = Math.min(devicePixelRatio || 1, 2); for (const c of colCards) { const w = c.cv.clientWidth || 160; c.cv.width = Math.round(w * dpr); c.cv.height = Math.round(w * dpr); c.dpr = dpr; } }
 
 // ---------------------------------------------------------------- trophy-room SIGNATURE MOVES: one unique move per bot (pose + canvas fx + sound)
-const SIG_IDS = ['blip-peek', 'pilly-toss', 'trix-slap', 'cubo-tip', 'harry-hearts', 'hexa-nya', 'nimbus-drizzle', 'bloom-sneeze', 'nebula-split', 'luna-alarm', 'grok-shades'];
-const SIG_DUR = 1.8, SIG_DURS = [1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 2.2, 2.2, 2.4, 2.8];   // per-bot move length
+const SIG_IDS = ['blip-peek', 'pilly-toss', 'trix-slap', 'cubo-tip', 'harry-hearts', 'hexa-nya', 'nimbus-storm', 'bloom-sneeze', 'nebula-split', 'luna-sunbonk', 'grok-ascend'];
+const SIG_DUR = 1.8, SIG_DURS = [1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 2.5, 2.2, 2.2, 2.4, 2.6];   // per-bot move length
 const sClamp = (k, a, b) => Math.max(0, Math.min(1, (k - a) / (b - a))), sEase = x => x * x * (3 - 2 * x);
 function sigPose(i, k, r) {
   const P = { dx: 0, dy: 0, a: 0, sx: 1, sy: 1, expr: 'happy', blush: 0, tAdd: 0, glint: 0, lx: null, ly: null, blink: null };
@@ -2567,23 +2567,27 @@ function sigPose(i, k, r) {
       if (k > 0.45 && k < 0.6) { const w = Math.sin(sClamp(k, 0.45, 0.6) * Math.PI); P.sy = 1 - w * 0.06; } break; }
     case 4: P.expr = 'blushing'; P.blush = 1; P.sx = 1 + 0.05 * Math.sin(k * 11); P.sy = 1 - 0.04 * Math.sin(k * 11); P.a = Math.sin(k * 3.2) * 0.14; break;   // deep blush, swaying
     case 5: P.expr = 'smile'; P.a = Math.sin(k * 9) * 0.07 * (1 - sClamp(k, 0.2, 1.6)); P.dy = -Math.sin(sClamp(k, 0.05, 0.35) * Math.PI) * r * 0.16; break;   // nya + ears pop
-    case 6: P.expr = k < 0.95 ? 'yawn' : null; P.sy = k < 0.95 ? 1 + 0.12 * Math.sin(sClamp(k, 0, 0.95) * Math.PI) : 1; P.sx = 2 - P.sy; P.a = Math.sin(k * 1.4) * 0.05; break;   // big yawn, drowsy
+    case 6: { P.a = Math.sin(k * 2.5) * 0.06;   // dozes off -> turns stormy and rains in her sleep -> wakes with a start, sheepish
+      if (k < 0.35) P.expr = 'yawn'; else if (k < 1.75) { P.expr = null; P.blink = true; P.sy = 1 + 0.03 * Math.sin(k * 6); P.tint = ['#3b4256', 0.62 * sEase(sClamp(k, 0.6, 1.0))]; if (k > 1.25 && k < 1.6) P.dx = Math.sin(k * 60) * r * 0.012; }
+      else if (k < 1.97) { P.expr = 'shock'; P.dy = -Math.sin(sClamp(k, 1.75, 1.92) * Math.PI) * r * 0.22; P.tint = ['#3b4256', 0.62 * (1 - sEase(sClamp(k, 1.75, 1.97)))]; P.a = 0; }
+      else { P.expr = 'nervous'; P.blush = 1; P.lx = -0.7; P.ly = 0.3; P.a = Math.sin(k * 5) * 0.03; } break; }
     case 7: { if (k < 0.55) { const q = sClamp(k, 0, 0.55); P.sy = 1 + 0.12 * q; P.sx = 1 - 0.06 * q; P.a = -0.15 * q + Math.sin(k * 30) * 0.02 * q; P.expr = 'nervous'; P.ly = -0.6; }   // ah... ah... ACHOO -> pollen -> dancing flower field
       else if (k < 0.85) { const w = Math.sin(sClamp(k, 0.55, 0.85) * Math.PI); P.dx = w * r * 0.16; P.a = -0.15 + 0.5 * w; P.sx = 1 + 0.16 * w; P.sy = 1 - 0.13 * w; P.expr = 'shock'; }
       else { P.expr = 'blushing'; P.blush = 1; P.lx = 0.7; P.ly = 0.7; P.a = Math.sin(k * 9) * 0.07 * sClamp(k, 1.1, 1.3); } break; }
     case 8: { if (k < 0.3) { P.sx = 1 + 0.1 * Math.sin(k * 45); P.sy = 1 - 0.1 * Math.sin(k * 45); P.expr = 'shock'; }   // splits into three mini clouds that orbit and recombine with a BOOM
       else if (k < 1.45) P.hide = true;
       else { P.scale = 1.28 - 0.28 * sEase(sClamp(k, 1.45, 1.75)); P.expr = 'cheer'; P.glint = 2 * (1 - sClamp(k, 1.5, 2.1)); } break; }
-    case 9: { if (k < 0.3) { P.blink = true; P.expr = null; P.sy = 1 + 0.025 * Math.sin(k * 7); }   // asleep -> alarm-clock star -> grumble -> cloud blanket -> snore
-      else if (k < 0.72) { P.expr = 'shock'; P.dy = -Math.sin(sClamp(k, 0.3, 0.45) * Math.PI) * r * 0.16; P.dx = Math.sin(k * 70) * r * 0.02; P.lx = 0.8; P.ly = -0.7; }
-      else if (k < 1.12) { P.expr = 'annoyed'; P.a = Math.sin(k * 22) * 0.04; P.lx = 0.8; P.ly = -0.5; }
-      else { P.blink = true; P.expr = null; P.dy = r * 0.04; P.sy = 1 + 0.03 * Math.sin(k * 6); } break; }
-    case 10: { P.expr = 'smug'; P.lx = 0.5; P.ly = -0.2;   // shades on -> black hole opens -> spirals in, gone -> hole flips -> pops back out, shades still on, smug
-      if (k > 0.38 && k < 0.5) P.dy = Math.sin(sClamp(k, 0.38, 0.5) * Math.PI) * r * 0.04;
-      if (k >= 0.5 && k < 1.12) { const q = sEase(sClamp(k, 0.5, 1.12)); P.scale = Math.max(0.001, 1 - q); P.a = q * TAU * 2.5; P.dx = Math.cos(q * 10) * r * 0.5 * (1 - q); P.dy = Math.sin(q * 10) * r * 0.22 * (1 - q); P.expr = 'shock'; }
-      else if (k >= 1.12 && k < 2.05) P.hide = true;
-      else if (k >= 2.05 && k < 2.42) { const s2 = sClamp(k, 2.05, 2.42); P.scale = s2 < 0.6 ? sEase(s2 / 0.6) * 1.18 : 1.18 - 0.18 * sEase((s2 - 0.6) / 0.4); P.dy = -Math.sin(s2 * Math.PI) * r * 0.35; P.a = (1 - s2) * -1.4; P.expr = 'cheer'; }
-      break; }
+    case 9: { P.expr = 'smile';   // a glaring sun slides over her -> squint -> wind-up WHACK -> sun spins away -> satisfied glow
+      if (k > 0.4 && k < 1.0) { P.expr = 'squint'; P.lx = 0.6; P.ly = -0.5; }
+      else if (k >= 1.0 && k < 1.25) { const w = sEase(sClamp(k, 1.0, 1.25)); P.expr = 'annoyed'; P.a = -0.35 * w; P.dx = -r * 0.12 * w; P.sx = 1 - 0.05 * w; P.sy = 1 + 0.05 * w; }
+      else if (k >= 1.25 && k < 1.6) { const w = 1 - sEase(sClamp(k, 1.3, 1.6)); P.expr = 'annoyed'; P.a = 0.4 * w; P.dx = r * 0.16 * w; P.sx = 1 + 0.08 * w; P.sy = 1 - 0.08 * w; P.lx = 0.9; P.ly = -0.9; }
+      else if (k >= 1.6) { P.expr = 'smug'; P.glint = 1.5 * (1 - sClamp(k, 1.9, 2.4)); P.blink = k > 1.9 && k < 2.3; } break; }
+    case 10: { const lev = sEase(sClamp(k, 0.3, 1.25)) * (1 - sEase(sClamp(k, 1.55, 1.95)));   // eyes flare, levitates in a charging ring, power-up BEAM, crown of light settles, grin
+      P.expr = k < 0.3 ? 'squint' : k < 1.55 ? 'smug' : 'cheer'; P.glint = k < 1.5 ? 2.2 : 1.2 * (1 - sClamp(k, 1.9, 2.5)); P.ly = -0.4;
+      P.dy = -lev * r * 0.32 + Math.sin(k * 9) * r * 0.02 * lev;
+      if (k > 1.25 && k < 1.5) { const w = Math.sin(sClamp(k, 1.25, 1.5) * Math.PI); P.sx = 1 + 0.12 * w; P.sy = 1 + 0.12 * w; }
+      if (k > 1.92 && k < 2.12) { const w = Math.sin(sClamp(k, 1.92, 2.12) * Math.PI); P.sy = 1 - 0.07 * w; P.sx = 1 + 0.06 * w; }
+      if (k > 2.0) P.expr = 'smug'; break; }
   }
   return P;
 }
@@ -2592,20 +2596,14 @@ function sHeart(c, x, y, s, col, al) { c.globalAlpha = al; c.fillStyle = col; c.
 function sigFx(c, i, cx, cy, r, k, P, front) {   // front=false: behind the bot, true: over it
   const T = TIERS[i], bx = cx + P.dx, by = cy + P.dy;
   if (!front) {
-    if (i === 10) { const hx = cx, hy = cy + r * 0.05, open = sEase(sClamp(k, 0.15, 0.5)), close = sEase(sClamp(k, 2.05, 2.35)), hr = r * 0.95 * open * (1 - close);   // the black hole (white hole after the flip)
-      if (hr > 0.5) { const flip = k >= 1.95, dir = flip ? -1 : 1, fl = sClamp(k, 1.9, 2.05) * (1 - sClamp(k, 2.1, 2.3));
-        if (k > 1.0 && k < 2.1) { c.strokeStyle = 'rgba(170,140,255,.35)'; c.lineWidth = 1.2; const wv = sClamp(k, 1.0, 1.3);   // warped space: grid lines bending into the hole
-          for (let j = -3; j <= 3; j++) { const off = j * r * 0.42; c.beginPath(); for (let t = -1.6; t <= 1.6; t += 0.1) { const x = hx + t * r, d = Math.hypot(t * r, off) / r, pull = wv * r * 0.5 / (1 + d * d * 1.5); c.lineTo(x, hy + off - Math.sign(off || 1) * pull); } c.stroke();
-            c.beginPath(); for (let t = -1.6; t <= 1.6; t += 0.1) { const y = hy + t * r, d = Math.hypot(off, t * r) / r, pull = wv * r * 0.5 / (1 + d * d * 1.5); c.lineTo(hx + off - Math.sign(off || 1) * pull, y); } c.stroke(); } }
-        const g = c.createRadialGradient(hx, hy, 0, hx, hy, hr * 1.25);
-        if (!flip) { g.addColorStop(0, '#000'); g.addColorStop(0.62, '#000'); g.addColorStop(0.8, 'rgba(120,60,200,.6)'); g.addColorStop(1, 'rgba(60,20,120,0)'); }
-        else { g.addColorStop(0, '#ffffff'); g.addColorStop(0.55, 'rgba(230,240,255,.95)'); g.addColorStop(0.85, 'rgba(160,200,255,.5)'); g.addColorStop(1, 'rgba(160,200,255,0)'); }
-        c.fillStyle = g; c.beginPath(); c.arc(hx, hy, hr * 1.25, 0, TAU); c.fill();
-        c.lineWidth = Math.max(1.5, hr * 0.07);
-        for (let j = 0; j < 4; j++) { c.strokeStyle = (flip ? ['#9fd3ff', '#ffffff', '#c9b8ff', '#ffe9a8'] : ['#ff9a3c', '#b06bff', '#ffd27a', '#ff5fa2'])[j]; c.globalAlpha = 0.85;
-          const st = dir * k * (7 + j * 2) + j * 1.6; c.beginPath(); c.ellipse(hx, hy, hr * (0.8 + j * 0.13), hr * (0.3 + j * 0.05), -0.25, st, st + 2.4); c.stroke(); }
-        if (fl > 0) { c.globalAlpha = fl; c.fillStyle = '#ffffff'; c.beginPath(); c.arc(hx, hy, r * 1.6 * fl, 0, TAU); c.fill(); }
-        c.globalAlpha = 1; } }
+    if (i === 10) { const ch = sClamp(k, 0.35, 1.25), go = 1 - sClamp(k, 1.3, 1.45), ry = by;   // rising orbit lines + back half of the charging ring
+      if (k > 0.3 && k < 1.45) { c.lineCap = 'round'; for (let j = 0; j < 9; j++) { const ph = (k * 1.6 + j * 0.13) % 1, x = cx + (j - 4) * r * 0.27, y = cy + r * 1.1 - ph * r * 2.4;
+          c.globalAlpha = go * sClamp(k, 0.3, 0.5) * Math.sin(ph * Math.PI) * 0.8; c.strokeStyle = j % 2 ? '#9fe8ff' : '#ffffff'; c.lineWidth = Math.max(1, r * 0.03); c.beginPath(); c.moveTo(x, y); c.lineTo(x, y + r * 0.35); c.stroke(); }
+        c.globalAlpha = go * 0.9; c.strokeStyle = '#bff3ff'; c.lineWidth = r * 0.06; c.shadowColor = '#7fe0ff'; c.shadowBlur = r * 0.25; c.beginPath(); c.ellipse(cx, ry, r * 1.35, r * 0.38, -0.18, Math.PI, Math.PI + Math.PI * Math.min(1, ch * 2)); c.stroke(); c.shadowBlur = 0; }
+      const bm = sClamp(k, 1.28, 1.75); if (bm > 0 && bm < 1) { const bw = r * 0.95 * (1 - bm);   // power-up beam: a column of light, top to bottom
+        const g = c.createLinearGradient(cx - bw, 0, cx + bw, 0); g.addColorStop(0, 'rgba(160,230,255,0)'); g.addColorStop(0.5, `rgba(255,255,255,${0.9 * (1 - bm)})`); g.addColorStop(1, 'rgba(160,230,255,0)');
+        c.globalAlpha = 1; c.fillStyle = g; c.fillRect(cx - bw, cy - r * 3, bw * 2, r * 6); }
+      c.globalAlpha = 1; }
     c.globalAlpha = 1; return;
   }
   switch (i) {
@@ -2629,10 +2627,16 @@ function sigFx(c, i, cx, cy, r, k, P, front) {   // front=false: behind the bot,
         c.fillStyle = '#ffb3e6'; c.beginPath(); c.moveTo(sd * r * 0.62, -r * 0.7); c.lineTo(sd * r * 0.5, -r * (0.66 + 0.38 * pop)); c.lineTo(sd * r * 0.33, -r * 0.8); c.closePath(); c.fill(); c.fillStyle = T.c; }
       const fl = Math.sin(k * 10) * 0.6; c.strokeStyle = T.c; c.lineWidth = r * 0.13; c.lineCap = 'round'; c.beginPath(); c.moveTo(r * 0.75, r * 0.5); c.quadraticCurveTo(r * 1.35, r * 0.6, r * (1.2 + fl * 0.2), r * (-0.1 - pop * 0.3)); c.stroke(); c.restore();
       sTxt(c, 'nya~', bx - r * 1.05, by - r * 1.05, r * 0.3, '#e6d4ff', pop); break; }
-    case 6: { const a = sClamp(k, 0.75, 0.95) * (1 - sClamp(k, 1.6, 1.8)); if (a <= 0) break; const ccx = cx + r * 0.2, ccy = cy - r * 1.45;   // tiny rain cloud + drizzle + zzz
-      c.globalAlpha = a; c.fillStyle = '#c9d2e3'; for (const [ox, oy, rr] of [[-0.3, 0.05, 0.22], [0, -0.08, 0.28], [0.3, 0.04, 0.2]]) { c.beginPath(); c.arc(ccx + ox * r, ccy + oy * r, rr * r, 0, TAU); c.fill(); }
-      c.strokeStyle = '#7fb6ff'; c.lineWidth = Math.max(1, r * 0.03); for (let j = 0; j < 5; j++) { const ph = (k * 2.5 + j * 0.37) % 1, x = ccx + (j - 2) * r * 0.14; c.beginPath(); c.moveTo(x, ccy + r * 0.2 + ph * r * 0.5); c.lineTo(x - r * 0.03, ccy + r * 0.3 + ph * r * 0.5); c.stroke(); }
-      sTxt(c, 'z', cx - r * 0.9, cy - r * 0.9 - (k - 0.9) * r * 0.3, r * 0.22, '#ffffff', a * 0.8); sTxt(c, 'z', cx - r * 1.15, cy - r * 1.2 - (k - 0.9) * r * 0.3, r * 0.3, '#ffffff', a * 0.6); c.globalAlpha = 1; break; }
+    case 6: { const za = sClamp(k, 0.4, 0.55) * (1 - sClamp(k, 1.7, 1.8));   // z's, storm rain from her underside, lightning, sheepish sweat
+      if (za > 0) for (let j = 0; j < 3; j++) { const ph = (k * 0.7 + j / 3) % 1; sTxt(c, 'z', bx - r * (0.8 + ph * 0.4), by - r * (0.85 + ph * 0.6), r * (0.16 + ph * 0.14), '#e8eefc', za * (1 - ph)); }
+      const rn = sClamp(k, 0.85, 1.0) * (1 - sClamp(k, 1.75, 1.85)); if (rn > 0) { c.strokeStyle = '#8fc3ff'; c.lineWidth = Math.max(1, r * 0.03); c.lineCap = 'round';
+        for (let j = 0; j < 14; j++) { const ph = (k * 3.2 + j * 0.31) % 1, x = bx + (j - 6.5) * r * 0.13 - ph * r * 0.08, y0 = by + r * 0.55, y = y0 + ph * r * 0.75; c.globalAlpha = rn * (1 - ph * 0.4); c.beginPath(); c.moveTo(x, y); c.lineTo(x - r * 0.04, y + r * 0.16); c.stroke(); } }
+      for (const lt of [1.32, 1.52]) { const f = sClamp(k, lt, lt + 0.03) * (1 - sClamp(k, lt + 0.06, lt + 0.11)); if (f <= 0) continue;
+        c.globalAlpha = f * 0.25; c.fillStyle = '#eaf2ff'; c.beginPath(); c.arc(bx, by, r * 1.3, 0, TAU); c.fill(); c.globalAlpha = f; c.strokeStyle = '#fff6a8'; c.lineWidth = Math.max(1.5, r * 0.05); c.lineJoin = 'round';
+        const sx2 = bx + (lt > 1.4 ? -0.3 : 0.35) * r; c.beginPath(); c.moveTo(sx2, by + r * 0.6); c.lineTo(sx2 - r * 0.12, by + r * 0.85); c.lineTo(sx2 + r * 0.05, by + r * 0.88); c.lineTo(sx2 - r * 0.08, by + r * 1.15); c.stroke(); }
+      if (k > 2.0) { const a = sClamp(k, 2.0, 2.1); c.globalAlpha = a; c.fillStyle = '#9fd0ff'; const sx2 = bx + r * 0.62, sy2 = by - r * 0.55 + sClamp(k, 2.05, 2.5) * r * 0.12;
+        c.beginPath(); c.moveTo(sx2, sy2 - r * 0.13); c.quadraticCurveTo(sx2 + r * 0.09, sy2, sx2, sy2 + r * 0.05); c.quadraticCurveTo(sx2 - r * 0.09, sy2, sx2, sy2 - r * 0.13); c.fill(); }
+      c.globalAlpha = 1; break; }
     case 7: { if (k > 0.1 && k < 0.55) sTxt(c, k < 0.32 ? 'ah…' : 'ah… ah…', bx + r * 0.2, by - r * 1.25, r * 0.26, '#eafff6', sClamp(k, 0.1, 0.18));
       const sn = sClamp(k, 0.55, 0.6) * (1 - sClamp(k, 0.95, 1.15)); if (sn > 0) sTxt(c, 'ACHOO!', cx + r * 0.9, cy - r * 1.2, r * 0.36, '#fff27a', sn);
       if (k > 0.55 && k < 1.2) { const bl = sEase(sClamp(k, 0.55, 0.9)), dn = sClamp(k, 0.85, 1.15), pcx = cx + r * (0.55 + bl * 0.55), pcy = cy - r * 0.15 + dn * dn * r * 0.9;   // puffy pollen cloud blasts out, drifts down
@@ -2657,31 +2661,34 @@ function sigFx(c, i, cx, cy, r, k, P, front) {   // front=false: behind the bot,
         if (bm < 0.25) { c.globalAlpha = 1 - bm * 4; c.fillStyle = '#ffffff'; c.beginPath(); c.arc(cx, cy, r * (1.1 + bm * 2), 0, TAU); c.fill(); }
         for (const [o, col] of [[0, '#f0c8ff'], [0.12, '#8fb4ff']]) { const q = sClamp(bm, o, 1); if (q <= 0) continue; c.globalAlpha = 1 - q; c.strokeStyle = col; c.lineWidth = r * 0.12 * (1 - q) + 1; c.beginPath(); c.ellipse(cx, cy, r * (1 + q * 1.15), r * (1 + q * 1.15) * 0.92, 0, 0, TAU); c.stroke(); }
         c.globalAlpha = 1; } break; }
-    case 9: { const sa = sClamp(k, 0.12, 0.24) * (1 - sClamp(k, 0.85, 1.05));   // alarm-clock star rings, gets grumbled at, flees
-      if (sa > 0) { const ring = k > 0.25 && k < 0.75, sx = cx + r * 1.0 + (ring ? Math.sin(k * 90) * r * 0.05 : 0) + sClamp(k, 0.85, 1.05) * r * 0.8, sy = cy - r * 1.05 - sClamp(k, 0.85, 1.05) * r * 0.6, q = r * 0.42 * (0.6 + 0.4 * sClamp(k, 0.12, 0.24));
-        c.globalAlpha = sa; c.fillStyle = '#ffcc33'; c.beginPath(); for (let j = 0; j < 10; j++) { const an = j / 10 * TAU - Math.PI / 2, d = j % 2 ? q * 0.45 : q; c.lineTo(sx + Math.cos(an) * d, sy + Math.sin(an) * d); } c.closePath(); c.fill();
-        c.fillStyle = '#fff4c8'; c.beginPath(); c.arc(sx, sy, q * 0.38, 0, TAU); c.fill(); c.strokeStyle = '#7a5200'; c.lineWidth = Math.max(1, q * 0.08); c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx, sy - q * 0.28); c.moveTo(sx, sy); c.lineTo(sx + q * 0.2, sy + q * 0.05); c.stroke();
-        c.fillStyle = '#ffcc33'; for (const sd of [-1, 1]) { c.beginPath(); c.arc(sx + sd * q * 0.55, sy - q * 0.85, q * 0.2, 0, TAU); c.fill(); }
-        if (ring) { c.strokeStyle = '#fff27a'; c.lineWidth = Math.max(1, r * 0.03); for (let j = 0; j < 3; j++) { c.beginPath(); c.arc(sx, sy, q * (1.2 + j * 0.25 + ((k * 6) % 1) * 0.2), -2.4 - j * 0.1, -0.7 + j * 0.1); c.stroke(); } sTxt(c, 'BRRING!', sx - r * 0.1, sy - q * 1.65, r * 0.22, '#fff27a', sa); }
-        c.globalAlpha = 1; }
-      const gr = sClamp(k, 0.72, 0.8) * (1 - sClamp(k, 1.05, 1.15)); if (gr > 0) { c.globalAlpha = gr; c.strokeStyle = '#ff7a7a'; c.lineWidth = Math.max(1.5, r * 0.04); c.beginPath();   // grumble scribble
-        for (let t = 0; t <= 1; t += 0.05) c.lineTo(bx - r * 0.75 + t * r * 0.7, by - r * 1.15 + Math.sin(t * 40 + k * 20) * r * 0.07); c.stroke(); sTxt(c, 'hmph', bx - r * 0.4, by - r * 1.4, r * 0.22, '#ffb3b3', gr); c.globalAlpha = 1; }
-      const bl = sEase(sClamp(k, 1.12, 1.42)); if (bl > 0) { const top = cy + r * 1.05 - bl * r * 0.62, fade = 1 - sClamp(k, 2.25, 2.4);   // fluffy cloud blanket pulled up
-        c.globalAlpha = fade; c.fillStyle = '#eef1fb'; c.beginPath(); c.rect(cx - r * 1.08, top, r * 2.16, cy + r * 1.06 - top); c.fill();
-        for (let j = 0; j < 6; j++) { c.beginPath(); c.arc(cx - r * 0.95 + j * r * 0.38, top + Math.sin(j * 2) * r * 0.03, r * 0.24, 0, TAU); c.fill(); }
-        c.fillStyle = '#b9c6e8'; for (let j = 0; j < 5; j++) { c.beginPath(); c.arc(cx - r * 0.7 + j * r * 0.35, top + r * 0.35 + (j % 2) * r * 0.2, r * 0.045, 0, TAU); c.fill(); }
-        if (k > 1.45) { const ph = ((k - 1.45) / 0.42) % 1, br = r * (0.04 + 0.22 * ph);   // snore bubble grows and pops
-          c.strokeStyle = 'rgba(200,225,255,.9)'; c.fillStyle = 'rgba(200,225,255,.25)'; c.lineWidth = Math.max(1, r * 0.025); c.beginPath(); c.arc(cx + r * 0.55 + br * 0.7, cy + r * 0.05 - br * 0.5, br, 0, TAU); c.fill(); c.stroke();
-          sTxt(c, 'z', cx + r * 0.95, cy - r * 0.75 - ph * r * 0.3, r * 0.2, '#eef3ff', fade * (1 - ph)); }
-        c.globalAlpha = 1; } break; }
-    case 10: { const vis = !P.hide && (P.scale == null || P.scale > 0.05); if (!vis) break; const sc = P.scale == null ? 1 : P.scale, d = sClamp(k, 0.05, 0.35), drop = k < 0.4 ? (1 - sEase(d)) * r * 1.6 : 0;   // shades stay on through the whole trip
-      const [ey, es] = T.e; c.save(); c.translate(bx, by); c.rotate(P.a); c.scale(sc, sc); c.translate(0, -drop); c.globalAlpha = sClamp(k, 0.05, 0.12);
-      c.fillStyle = '#0a0a0f'; c.strokeStyle = '#e6e6ee'; c.lineWidth = Math.max(1, r * 0.03);
-      for (const sd of [-1, 1]) { const lx = sd * es * r; c.beginPath(); c.roundRect(lx - r * 0.29, ey * r - r * 0.16, r * 0.56, r * 0.32, r * 0.1); c.fill(); c.stroke(); c.fillStyle = 'rgba(255,255,255,.35)'; c.fillRect(lx - r * 0.18, ey * r - r * 0.09, r * 0.13, r * 0.045); c.fillStyle = '#0a0a0f'; }
-      c.beginPath(); c.moveTo(-es * r + r * 0.29, ey * r - r * 0.05); c.lineTo(es * r - r * 0.29, ey * r - r * 0.05); c.stroke();
-      const br = Math.max(sEase(sClamp(k, 0.22, 0.38)) * (1 - sClamp(k, 0.45, 0.55)), sEase(sClamp(k, 2.42, 2.6)));   // smug brow (before + after)
-      if (br > 0) { c.lineWidth = r * 0.06; c.lineCap = 'round'; c.beginPath(); c.moveTo(es * r - r * 0.22, ey * r - r * 0.27 - br * r * 0.14); c.lineTo(es * r + r * 0.2, ey * r - r * 0.32 - br * r * 0.22); c.stroke(); }
-      c.restore(); break; }
+    case 9: { const into = sEase(sClamp(k, 0.1, 0.55)), fly = sClamp(k, 1.28, 1.85); if (k < 0.1 || fly >= 1) break;   // the glaring sun
+      const sx = cx - r * 2.2 + into * r * 2.55 + fly * fly * r * 3.2, sy = cy - r * 0.25 - fly * r * 2.2 + fly * fly * r * 0.6, sr = r * 0.82 * (1 - fly * 0.35), rot = k * 1.5 + fly * 14;
+      const gl = into * (1 - sClamp(k, 1.25, 1.35)); if (gl > 0) { const gg = c.createRadialGradient(sx, sy, sr * 0.8, sx, sy, sr * 2.6); gg.addColorStop(0, `rgba(255,236,150,${0.55 * gl})`); gg.addColorStop(1, 'rgba(255,236,150,0)'); c.globalAlpha = 1; c.fillStyle = gg; c.beginPath(); c.arc(sx, sy, sr * 2.6, 0, TAU); c.fill(); }
+      c.globalAlpha = 1; c.save(); c.translate(sx, sy); c.rotate(rot); c.fillStyle = '#ffb21f';
+      for (let j = 0; j < 12; j++) { const an = j / 12 * TAU; c.beginPath(); c.moveTo(Math.cos(an - 0.13) * sr * 0.95, Math.sin(an - 0.13) * sr * 0.95); c.lineTo(Math.cos(an) * sr * 1.45, Math.sin(an) * sr * 1.45); c.lineTo(Math.cos(an + 0.13) * sr * 0.95, Math.sin(an + 0.13) * sr * 0.95); c.fill(); }
+      const g = c.createRadialGradient(-sr * 0.3, -sr * 0.3, 0, 0, 0, sr); g.addColorStop(0, '#fffbe0'); g.addColorStop(0.6, '#ffd84a'); g.addColorStop(1, '#ffa31a'); c.fillStyle = g; c.beginPath(); c.arc(0, 0, sr, 0, TAU); c.fill(); c.rotate(-rot + fly * 14);
+      c.strokeStyle = '#8a4b00'; c.lineWidth = Math.max(1.5, sr * 0.08); c.lineCap = 'round'; const hit = fly > 0;   // smug glaring face, dizzy X-eyes after the whack
+      for (const sd of [-1, 1]) { const ex = sd * sr * 0.32, ey = -sr * 0.1; c.beginPath(); if (hit) { c.moveTo(ex - sr * 0.1, ey - sr * 0.1); c.lineTo(ex + sr * 0.1, ey + sr * 0.1); c.moveTo(ex + sr * 0.1, ey - sr * 0.1); c.lineTo(ex - sr * 0.1, ey + sr * 0.1); } else { c.moveTo(ex - sr * 0.14, ey - sr * 0.02); c.lineTo(ex + sr * 0.14, ey + sd * sr * 0.04); } c.stroke(); }
+      c.beginPath(); if (hit) c.arc(0, sr * 0.38, sr * 0.1, 0, TAU); else c.arc(0, sr * 0.2, sr * 0.22, 0.25, Math.PI - 0.25); c.stroke(); c.restore();
+      const bk = sClamp(k, 1.27, 1.32) * (1 - sClamp(k, 1.6, 1.75)); if (bk > 0) { sTxt(c, 'BONK!', cx + r * 0.75, cy - r * 1.2, r * 0.38, '#ffe066', Math.min(1, bk * 2)); c.globalAlpha = bk; c.strokeStyle = '#ffffff'; c.lineWidth = Math.max(1.5, r * 0.04);
+        for (let j = 0; j < 6; j++) { const an = -1.2 + j * 0.35, d0 = r * 0.6, d1 = r * (0.85 + sClamp(k, 1.27, 1.5) * 0.3); c.beginPath(); c.moveTo(cx + r * 0.5 + Math.cos(an) * d0, cy - r * 0.35 + Math.sin(an) * d0); c.lineTo(cx + r * 0.5 + Math.cos(an) * d1, cy - r * 0.35 + Math.sin(an) * d1); c.stroke(); } }
+      c.globalAlpha = 1; break; }
+    case 10: { const ch = sClamp(k, 0.35, 1.25), go = 1 - sClamp(k, 1.3, 1.45);
+      if (k < 0.45) { const f = Math.sin(sClamp(k, 0.02, 0.45) * Math.PI), [ey, es] = T.e; c.fillStyle = '#c9f6ff';   // eye flare
+        for (const sd of [-1, 1]) { const ex = bx + sd * es * r, eyy = by + ey * r, g = c.createRadialGradient(ex, eyy, 0, ex, eyy, r * 0.45 * f + 1); g.addColorStop(0, `rgba(220,250,255,${f})`); g.addColorStop(1, 'rgba(120,220,255,0)'); c.fillStyle = g; c.beginPath(); c.arc(ex, eyy, r * 0.45 * f + 1, 0, TAU); c.fill(); } }
+      if (k > 0.3 && k < 1.45) { c.globalAlpha = go; c.strokeStyle = '#ffffff'; c.lineWidth = r * 0.06; c.shadowColor = '#7fe0ff'; c.shadowBlur = r * 0.25; c.lineCap = 'round';   // front half of the charging ring
+        c.beginPath(); c.ellipse(cx, by, r * 1.35, r * 0.38, -0.18, 0, Math.PI * Math.min(1, ch * 2 - 1 > 0 ? ch * 2 - 1 : 0.0001)); c.stroke(); c.shadowBlur = 0;
+        const sp = k * 9; c.fillStyle = '#ffffff'; c.beginPath(); c.arc(cx + Math.cos(sp) * r * 1.35, by + Math.sin(sp) * r * 0.38, r * 0.06, 0, TAU); c.fill(); }
+      const sw = sClamp(k, 1.3, 1.85); if (sw > 0 && sw < 1) { c.globalAlpha = 1 - sw; c.strokeStyle = '#bff3ff'; c.lineWidth = r * 0.1 * (1 - sw) + 1;   // flat ground shockwave (not a ring around her like Nebula's)
+        c.beginPath(); c.ellipse(cx, cy + r * 1.0, r * (0.6 + sw * 2.2), r * (0.12 + sw * 0.25), 0, 0, TAU); c.stroke(); }
+      const cr = sEase(sClamp(k, 1.45, 1.95)), cf = 1 - sClamp(k, 2.45, 2.6); if (cr > 0 && cf > 0) {   // crown of light descends and settles
+        const hx = bx, hy = by - r * 0.92 - (1 - cr) * r * 1.4, w = r * 0.62, h = r * 0.42; c.globalAlpha = cf * Math.min(1, cr * 2); c.save(); c.translate(hx, hy); c.rotate(P.a);
+        c.shadowColor = '#ffe9a0'; c.shadowBlur = r * 0.3; const g = c.createLinearGradient(0, -h, 0, h * 0.3); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#ffd34d'); c.fillStyle = g;
+        c.beginPath(); c.moveTo(-w, h * 0.3); c.lineTo(-w, -h * 0.35); c.lineTo(-w * 0.5, h * -0.05); c.lineTo(0, -h); c.lineTo(w * 0.5, h * -0.05); c.lineTo(w, -h * 0.35); c.lineTo(w, h * 0.3); c.closePath(); c.fill(); c.shadowBlur = 0;
+        c.fillStyle = '#7fe0ff'; for (const [x, y] of [[-w, -h * 0.35], [0, -h], [w, -h * 0.35]]) { c.beginPath(); c.arc(x, y, r * 0.06, 0, TAU); c.fill(); } c.restore();
+        if (k > 1.9 && k < 2.3) { const q = sClamp(k, 1.9, 2.3); for (let j = 0; j < 5; j++) { const an = -Math.PI / 2 + (j - 2) * 0.5; c.globalAlpha = (1 - q) * cf; c.strokeStyle = '#fff2b0'; c.lineWidth = Math.max(1, r * 0.03);
+          c.beginPath(); c.moveTo(hx + Math.cos(an) * r * 0.6, hy + Math.sin(an) * r * 0.6); c.lineTo(hx + Math.cos(an) * r * (0.75 + q * 0.4), hy + Math.sin(an) * r * (0.75 + q * 0.4)); c.stroke(); } } }
+      c.globalAlpha = 1; break; }
   }
   c.globalAlpha = 1;
 }
@@ -2693,11 +2700,11 @@ function sigSound(i) {
     () => { tone(300, 240, 0.12, 'sine', 0.05); tone(120, 55, 0.2, 'square', 0.13, 0.45); tone(1900, 1900, 0.03, 'sine', 0.05, 0.8); tone(240, 420, 0.12, 'triangle', 0.06, 1.25); }, // Cubo: thunk + blink tick
     () => { tone(660, 880, 0.3, 'sine', 0.07); tone(880, 1180, 0.32, 'sine', 0.06, 0.25); [0.5, 0.7, 0.9].forEach(d => tone(1400, 1750, 0.06, 'sine', 0.035, d)); }, // Harry: aww + heart pops
     () => { tone(900, 1450, 0.12, 'sawtooth', 0.035); tone(1450, 780, 0.28, 'sawtooth', 0.035, 0.12); tone(2200, 2600, 0.05, 'sine', 0.03, 0.55); },  // Hexa: nya~
-    () => { tone(520, 230, 0.75, 'triangle', 0.06); for (let j = 0; j < 6; j++) tone(2100 + j * 140, 1900, 0.025, 'sine', 0.02, 0.9 + j * 0.11); },     // Nimbus: yawn + drizzle
+    () => { tone(85, 105, 0.45, 'sawtooth', 0.03, 0.4); tone(85, 105, 0.45, 'sawtooth', 0.03, 0.95); for (let j = 0; j < 22; j++) tone(3000 + (j * 937) % 2400, 2600, 0.03, 'sine', 0.012, 0.9 + j * 0.038); tone(62, 44, 0.6, 'sawtooth', 0.05, 1.28); tone(1600, 220, 0.07, 'square', 0.025, 1.32); tone(1600, 220, 0.06, 'square', 0.02, 1.52); tone(620, 1250, 0.1, 'sine', 0.07, 1.75); tone(520, 430, 0.22, 'triangle', 0.035, 2.02); },  // Nimbus: snore, rain hiss, rumble+crack, wake blip, sheepish
     () => { tone(480, 620, 0.22, 'triangle', 0.05, 0.08); tone(560, 760, 0.25, 'triangle', 0.055, 0.32); tone(1900, 260, 0.2, 'sawtooth', 0.09, 0.56); tone(1000, 180, 0.16, 'square', 0.05, 0.58); [784, 988, 1175, 988, 784, 1175, 1319].forEach((f, j) => tone(f, f, 0.08, 'triangle', 0.04, 1.05 + j * 0.13)); },  // Bloom: ah.. ah.. ACHOO + pizzicato flower dance
     () => { tone(420, 620, 0.1, 'sine', 0.07, 0.3); tone(620, 900, 0.1, 'sine', 0.07, 0.38); tone(900, 1300, 0.1, 'sine', 0.07, 0.46); tone(300, 330, 0.85, 'sine', 0.03, 0.5); tone(450, 420, 0.85, 'triangle', 0.02, 0.5); tone(170, 38, 0.75, 'sine', 0.15, 1.45); tone(2600, 90, 0.32, 'sawtooth', 0.05, 1.45); tone(1760, 1770, 0.6, 'sine', 0.03, 1.62); },  // Nebula: bloop-bloop-bloop, orbit warble, cosmic BOOM
-    () => { tone(110, 110, 0.25, 'sine', 0.03); for (let j = 0; j < 9; j++) tone(j % 2 ? 2400 : 2000, j % 2 ? 2400 : 2000, 0.035, 'square', 0.04, 0.25 + j * 0.055); tone(190, 140, 0.28, 'sawtooth', 0.045, 0.75); tone(150, 175, 0.2, 'sawtooth', 0.035, 0.95); tone(900, 280, 0.3, 'triangle', 0.03, 1.12); tone(85, 110, 0.45, 'sawtooth', 0.035, 1.5); tone(1150, 1500, 0.28, 'sine', 0.02, 1.98); },  // Luna: alarm BRRING, grumble, blanket swish, snore-whistle
-    () => { tone(2400, 2150, 0.05, 'square', 0.04, 0.12); tone(55, 180, 0.6, 'sawtooth', 0.04, 0.3); tone(900, 70, 0.7, 'sine', 0.06, 0.5); tone(50, 52, 0.9, 'sine', 0.05, 1.12); tone(70, 1500, 0.18, 'triangle', 0.06, 1.9); tone(480, 1250, 0.09, 'square', 0.06, 2.08); tone(2400, 2150, 0.05, 'square', 0.04, 2.2); tone(140, 105, 0.45, 'sawtooth', 0.05, 2.45); },  // Grok: clink, hole opens, spiral in, void hum, flip, POP, clink, smug bass
+    () => { tone(200, 720, 0.45, 'triangle', 0.03, 0.1); tone(880, 884, 0.5, 'sine', 0.02, 0.5); tone(320, 150, 0.22, 'sine', 0.04, 1.0); tone(330, 85, 0.13, 'square', 0.09, 1.27); tone(920, 560, 0.09, 'triangle', 0.06, 1.27); tone(1300, 380, 0.45, 'sine', 0.03, 1.36); tone(1046, 1046, 0.4, 'sine', 0.04, 1.8); tone(1568, 1568, 0.45, 'sine', 0.03, 1.92); },  // Luna: sun slides in, glare hum, wind-up, BONK, fly-off whistle, content chime
+    () => { tone(1500, 2500, 0.12, 'sine', 0.035, 0.05); tone(80, 330, 0.95, 'sawtooth', 0.04, 0.3); tone(160, 660, 0.95, 'triangle', 0.03, 0.3); tone(105, 38, 0.6, 'sawtooth', 0.1, 1.28); tone(2100, 500, 0.25, 'square', 0.04, 1.28); [523, 659, 784, 1046].forEach((f, j) => tone(f, f, 0.5, 'triangle', 0.045, 1.55 + j * 0.06)); },  // Grok: eye flare, charge-up, power BURST, crown fanfare
   ];
   (S[i] || S[0])();
 }
@@ -2709,9 +2716,11 @@ function drawSigFrame(c, i, W, H, seen, R, tt) {
   const r = W * 0.24, cx = W / 2 + wob, cy = H * 0.5 + bob, breathe = 1 + Math.sin(tt * 2.4 + i * 0.7) * 0.025;
   const P = sig ? sigPose(i, k, r) : null;
   if (sig) sigFx(c, i, cx, cy, r, k, P, false);
-  if (!(P && P.hide)) drawBot(c, i, cx + (P ? P.dx : 0), cy + (P ? P.dy : 0), r * (P && P.scale != null ? P.scale : 1), { a: P ? P.a : (R ? Math.sin(k * 30) * 0.12 * (1 - k) : Math.sin(tt * 1.3 + i) * 0.03), sx: (P ? P.sx : 1) / breathe, sy: (P ? P.sy : 1) * breathe,
+  let dc = c, tc = null; if (P && P.tint && P.tint[1] > 0.01) { tc = document.createElement('canvas'); tc.width = W; tc.height = H; dc = tc.getContext('2d'); }
+  if (!(P && P.hide)) drawBot(dc, i, cx + (P ? P.dx : 0), cy + (P ? P.dy : 0), r * (P && P.scale != null ? P.scale : 1), { a: P ? P.a : (R ? Math.sin(k * 30) * 0.12 * (1 - k) : Math.sin(tt * 1.3 + i) * 0.03), sx: (P ? P.sx : 1) / breathe, sy: (P ? P.sy : 1) * breathe,
     lx: P && P.lx != null ? P.lx : Math.sin(tt * 0.7 + i) * 0.4, ly: P && P.ly != null ? P.ly : 0.15, blink: P && P.blink != null ? P.blink : blinkAt(tt * 0.8, i * 1.37),
     expr: !seen ? null : P ? P.expr : null, blush: P ? P.blush : 0, t: tt + (P ? P.tAdd : 0), glint: P ? P.glint : 0 });
+  if (tc) { dc.globalCompositeOperation = 'source-atop'; dc.globalAlpha = P.tint[1]; dc.fillStyle = P.tint[0]; dc.fillRect(0, 0, W, H); c.drawImage(tc, 0, 0); }   // stormy tint on the bot only
   if (!seen) { c.globalCompositeOperation = 'source-atop'; c.fillStyle = '#0b0b14'; c.fillRect(0, 0, W, H); c.globalCompositeOperation = 'source-over';
     c.fillStyle = 'rgba(255,255,255,.55)'; c.font = `900 ${Math.round(W * 0.12)}px system-ui,sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('?', cx, cy); }
   if (sig) sigFx(c, i, cx, cy, r, k, P, true);
