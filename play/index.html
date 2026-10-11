@@ -2569,7 +2569,7 @@ function sigPose(i, k, r) {
       P.dx = k > 0.5 && k < 0.9 ? r * 0.18 * Math.sin(sClamp(k, 0.5, 0.9) * Math.PI) : 0; P.expr = k < 1.1 ? 'annoyed' : 'smirk'; break;
     case 3: { const tip = k < 0.45 ? sEase(sClamp(k, 0.08, 0.45)) : k < 1.2 ? 1 : 1 - sEase(sClamp(k, 1.2, 1.6));   // tips onto a side (pivot on the corner), thunk, blink, flips back
       P.a = tip * Math.PI / 2; P.dx = tip * r * 0.85 * 0.9; P.dy = -Math.sin(tip * Math.PI) * r * 0.3 + tip * r * 0.02; P.expr = null; P.blink = k > 0.78 && k < 0.92;
-      if (k > 0.45 && k < 0.6) { const w = Math.sin(sClamp(k, 0.45, 0.6) * Math.PI); P.sy = 1 - w * 0.06; } break; }
+      if (k > 0.44 && k < 0.68) { const q = Math.sin(sClamp(k, 0.44, 0.68) * Math.PI), w = q * q; P.sy = 1 - w * 0.1; P.sx = 1 + w * 0.06; P.dy += w * r * 0.09; } break; }
     case 4: P.expr = 'blushing'; P.blush = 1; P.sx = 1 + 0.05 * Math.sin(k * 11); P.sy = 1 - 0.04 * Math.sin(k * 11); P.a = Math.sin(k * 3.2) * 0.14; break;   // deep blush, swaying
     case 5: P.expr = 'smile'; P.a = Math.sin(k * 9) * 0.07 * (1 - sClamp(k, 0.2, 1.6)); P.dy = -Math.sin(sClamp(k, 0.05, 0.35) * Math.PI) * r * 0.16; break;   // nya + ears pop
     case 6: { P.a = Math.sin(k * 2.5) * 0.06;   // dozes off -> turns stormy and rains in her sleep -> wakes with a start, sheepish
@@ -2587,12 +2587,13 @@ function sigPose(i, k, r) {
       else if (k >= 1.0 && k < 1.25) { const w = sEase(sClamp(k, 1.0, 1.25)); P.expr = 'annoyed'; P.a = -0.35 * w; P.dx = -r * 0.12 * w; P.sx = 1 - 0.05 * w; P.sy = 1 + 0.05 * w; }
       else if (k >= 1.25 && k < 1.6) { const w = 1 - sEase(sClamp(k, 1.3, 1.6)); P.expr = 'annoyed'; P.a = 0.4 * w; P.dx = r * 0.16 * w; P.sx = 1 + 0.08 * w; P.sy = 1 - 0.08 * w; P.lx = 0.9; P.ly = -0.9; }
       else if (k >= 1.6) { P.expr = 'smug'; P.glint = 1.5 * (1 - sClamp(k, 1.9, 2.4)); P.blink = k > 1.9 && k < 2.3; } break; }
-    case 10: { const lev = sEase(sClamp(k, 0.3, 1.25)) * (1 - sEase(sClamp(k, 1.55, 1.95)));   // eyes flare, levitates in a charging ring, power-up BEAM, crown of light settles, grin
-      P.expr = k < 0.3 ? 'squint' : k < 1.55 ? 'smug' : 'cheer'; P.glint = k < 1.5 ? 2.2 : 1.2 * (1 - sClamp(k, 1.9, 2.5)); P.ly = -0.4;
+    case 10: { const lev = sEase(sClamp(k, 0.3, 1.25)) * (1 - sEase(sClamp(k, 1.5, 2.0)));   // eyes flare, levitates in a charging ring, power-up BEAM, eased descent, crown of light settles, grin
+      P.expr = k < 0.3 ? 'squint' : 'smug';   // single expression switch, hidden under the eye flare
+      P.glint = 2.2 * (1 - sEase(sClamp(k, 1.3, 2.5))); P.ly = -0.4 + 0.55 * sEase(sClamp(k, 2.2, 2.6));   // eased back to the resting look
       P.dy = -lev * r * 0.32 + Math.sin(k * 9) * r * 0.02 * lev;
-      if (k > 1.25 && k < 1.5) { const w = Math.sin(sClamp(k, 1.25, 1.5) * Math.PI); P.sx = 1 + 0.12 * w; P.sy = 1 + 0.12 * w; }
-      if (k > 1.92 && k < 2.12) { const w = Math.sin(sClamp(k, 1.92, 2.12) * Math.PI); P.sy = 1 - 0.07 * w; P.sx = 1 + 0.06 * w; }
-      if (k > 2.0) P.expr = 'smug'; break; }
+      const bq = Math.sin(sClamp(k, 1.22, 1.52) * Math.PI), bu = bq * bq; P.sx = P.sy = 1 + 0.1 * bu;   // burst swell (zero-velocity ends)
+      const lq = Math.sin(sClamp(k, 1.88, 2.38) * Math.PI), lw = lq * lq; P.sy *= 1 - 0.07 * lw; P.sx *= 1 + 0.055 * lw; P.dy += r * 0.065 * lw;   // gentle landing squash, base stays on the ground
+      break; }
   }
   return P;
 }
@@ -2616,7 +2617,7 @@ function grokCrown(T, x, y, R, a, sx, sy, halfW, h) {   // crown geometry on the
 function sigFx(c, i, cx, cy, r, k, P, front) {   // front=false: behind the bot, true: over it
   const T = TIERS[i], bx = cx + P.dx, by = cy + P.dy;
   if (!front) {
-    if (i === 10) { const ch = sClamp(k, 0.35, 1.25), go = 1 - sClamp(k, 1.3, 1.45), ry = by;   // rising orbit lines + back half of the charging ring
+    if (i === 10) { const ch = sClamp(k, 0.35, 1.25), go = sEase(sClamp(k, 0.3, 0.45)) * (1 - sEase(sClamp(k, 1.3, 1.5))), ry = by;   // rising orbit lines + back half of the charging ring
       if (k > 0.3 && k < 1.45) { c.lineCap = 'round'; for (let j = 0; j < 9; j++) { const ph = (k * 1.6 + j * 0.13) % 1, x = cx + (j - 4) * r * 0.27, y = cy + r * 1.1 - ph * r * 2.4;
           c.globalAlpha = go * sClamp(k, 0.3, 0.5) * Math.sin(ph * Math.PI) * 0.8; c.strokeStyle = j % 2 ? '#9fe8ff' : '#ffffff'; c.lineWidth = Math.max(1, r * 0.03); c.beginPath(); c.moveTo(x, y); c.lineTo(x, y + r * 0.35); c.stroke(); }
         c.globalAlpha = go * 0.9; c.strokeStyle = '#bff3ff'; c.lineWidth = r * 0.06; c.shadowColor = '#7fe0ff'; c.shadowBlur = r * 0.25; c.beginPath(); c.ellipse(cx, ry, r * 1.35, r * 0.38, -0.18, Math.PI, Math.PI + Math.PI * Math.min(1, ch * 2)); c.stroke(); c.shadowBlur = 0; }
@@ -2637,8 +2638,17 @@ function sigFx(c, i, cx, cy, r, k, P, front) {   // front=false: behind the bot,
       const a = sClamp(k, 0.6, 0.66) * (1 - sClamp(k, 1.1, 1.4)); if (a > 0) { const sx = bx + r * 1.35, sy = by - r * 0.4, sr = r * (0.42 + 0.12 * sClamp(k, 0.6, 0.8));
         c.globalAlpha = a; c.fillStyle = '#fff3c4'; c.beginPath(); for (let j = 0; j < 16; j++) { const an = j / 16 * TAU, d = sr * (j % 2 ? 0.6 : 1); c.lineTo(sx + Math.cos(an) * d, sy + Math.sin(an) * d); } c.closePath(); c.fill();
         sTxt(c, 'SLAP!', sx, sy, r * 0.32, '#ff3b2f', a); } break; }
-    case 3: { const a = sClamp(k, 0.44, 0.5) * (1 - sClamp(k, 0.9, 1.15)); if (a > 0) { sTxt(c, 'thunk', cx + r * 1.4, cy + r * 0.45, r * 0.3, '#cfe0ff', a);
-        for (let j = 0; j < 4; j++) { const d = sClamp(k, 0.45, 0.9); c.globalAlpha = a * 0.6; c.fillStyle = '#9aa6c0'; c.beginPath(); c.arc(cx + r * (0.4 + j * 0.35) + d * r * 0.3 * (j - 1.5), cy + r * 0.95 - d * r * 0.15, r * 0.08 * (1 + d), 0, TAU); c.fill(); } c.globalAlpha = 1; } break; }
+    case 3: { const a = sEase(sClamp(k, 0.44, 0.52)) * (1 - sEase(sClamp(k, 0.9, 1.15))); if (a > 0.002) sTxt(c, 'thunk', cx + r * 1.55, cy + r * 0.2, r * 0.3, '#cfe0ff', a);
+      const q = sClamp(k, 0.44, 1.3); if (q > 0 && q < 1) { const gy = by + r * 0.86, ex = [bx - r * 0.8, bx + r * 0.8], sp = 1 - Math.pow(1 - q, 3), fa = sEase(sClamp(q, 0, 0.08)) * (1 - sEase(sClamp(q, 0.35, 1)));   // cartoon dust: soft rolling puffs out along the ground from both impact edges
+        for (let side = 0; side < 2; side++) { const dir = side ? 1 : -1;
+          const reach = side ? 0.55 : 0.85;   // a clumped mound: bottom row + smaller puffs stacked on top, shrinking outward
+          for (const [fx, fy, fs] of [[0.15, -0.2, 0.62], [0.45, -0.17, 0.55], [0.75, -0.11, 0.42], [0, 0, 1], [0.3, 0.02, 0.88], [0.6, 0.01, 0.72], [0.9, 0.03, 0.55]]) {
+            const x = ex[side] + dir * r * (0.08 + sp * fx * reach), y = gy - r * 0.1 + fy * r * (0.5 + sp) - sp * r * 0.08, pr = r * 0.2 * fs * (0.5 + sp * 0.8);
+            const g = c.createRadialGradient(x - pr * 0.2, y - pr * 0.35, pr * 0.15, x, y, pr); g.addColorStop(0, `rgba(242,232,214,${fa})`); g.addColorStop(0.7, `rgba(222,208,184,${fa})`); g.addColorStop(1, `rgba(214,198,172,${0.15 * fa})`);
+            c.globalAlpha = 1; c.fillStyle = g; c.beginPath(); c.arc(x, y, pr, 0, TAU); c.fill(); } }
+        const dq = sClamp(k, 0.45, 0.95); if (dq > 0 && dq < 1) for (let j = 0; j < 4; j++) { const dir = j % 2 ? 1 : -1, vx = r * (0.9 + j * 0.25), x = ex[j % 2] + dir * vx * dq, y = gy - r * 0.05 - (r * 1.1 * dq - r * 1.6 * dq * dq) * (0.7 + 0.2 * j);   // tiny debris specks
+          c.globalAlpha = 1 - sEase(sClamp(dq, 0.6, 1)); c.fillStyle = '#8a7a64'; c.beginPath(); c.arc(x, Math.min(y, gy), r * 0.028, 0, TAU); c.fill(); }
+        c.globalAlpha = 1; } break; }
     case 4: for (let j = 0; j < 6; j++) { const q = sClamp(k, 0.1 + j * 0.16, 0.9 + j * 0.16); if (q <= 0 || q >= 1) continue;
         sHeart(c, bx + Math.sin(q * 6 + j * 2) * r * 0.5 + (j - 2.5) * r * 0.22, by - r * 0.9 - q * r * 1.0, r * (0.17 + 0.05 * (j % 2)), j % 2 ? '#ff5fa2' : '#ffb3d1', 1 - q); } break;
     case 5: { const pop = sEase(sClamp(k, 0.08, 0.28)) * (1 - sEase(sClamp(k, 1.4, 1.7))); if (pop <= 0) break;   // cat ears + tail flick + nya
@@ -2693,22 +2703,25 @@ function sigFx(c, i, cx, cy, r, k, P, front) {   // front=false: behind the bot,
       const bk = sClamp(k, 1.27, 1.32) * (1 - sClamp(k, 1.6, 1.75)); if (bk > 0) { sTxt(c, 'BONK!', cx + r * 0.75, cy - r * 1.2, r * 0.38, '#ffe066', Math.min(1, bk * 2)); c.globalAlpha = bk; c.strokeStyle = '#ffffff'; c.lineWidth = Math.max(1.5, r * 0.04);
         for (let j = 0; j < 6; j++) { const an = -1.2 + j * 0.35, d0 = r * 0.6, d1 = r * (0.85 + sClamp(k, 1.27, 1.5) * 0.3); c.beginPath(); c.moveTo(cx + r * 0.5 + Math.cos(an) * d0, cy - r * 0.35 + Math.sin(an) * d0); c.lineTo(cx + r * 0.5 + Math.cos(an) * d1, cy - r * 0.35 + Math.sin(an) * d1); c.stroke(); } }
       c.globalAlpha = 1; break; }
-    case 10: { const ch = sClamp(k, 0.35, 1.25), go = 1 - sClamp(k, 1.3, 1.45);
+    case 10: { const ch = sClamp(k, 0.35, 1.25), go = sEase(sClamp(k, 0.3, 0.45)) * (1 - sEase(sClamp(k, 1.3, 1.5)));
       if (k < 0.45) { const f = Math.sin(sClamp(k, 0.02, 0.45) * Math.PI), [ey, es] = T.e; c.fillStyle = '#c9f6ff';   // eye flare
         for (const sd of [-1, 1]) { const ex = bx + sd * es * r, eyy = by + ey * r, g = c.createRadialGradient(ex, eyy, 0, ex, eyy, r * 0.45 * f + 1); g.addColorStop(0, `rgba(220,250,255,${f})`); g.addColorStop(1, 'rgba(120,220,255,0)'); c.fillStyle = g; c.beginPath(); c.arc(ex, eyy, r * 0.45 * f + 1, 0, TAU); c.fill(); } }
       if (k > 0.3 && k < 1.45) { c.globalAlpha = go; c.strokeStyle = '#ffffff'; c.lineWidth = r * 0.06; c.shadowColor = '#7fe0ff'; c.shadowBlur = r * 0.25; c.lineCap = 'round';   // front half of the charging ring
         c.beginPath(); c.ellipse(cx, by, r * 1.35, r * 0.38, -0.18, 0, Math.PI * Math.min(1, ch * 2 - 1 > 0 ? ch * 2 - 1 : 0.0001)); c.stroke(); c.shadowBlur = 0;
         const sp = k * 9; c.fillStyle = '#ffffff'; c.beginPath(); c.arc(cx + Math.cos(sp) * r * 1.35, by + Math.sin(sp) * r * 0.38, r * 0.06, 0, TAU); c.fill(); }
-      const sw = sClamp(k, 1.3, 1.85); if (sw > 0 && sw < 1) { c.globalAlpha = 1 - sw; c.strokeStyle = '#bff3ff'; c.lineWidth = r * 0.1 * (1 - sw) + 1;   // flat ground shockwave (not a ring around her like Nebula's)
+      const sw = sClamp(k, 1.3, 1.85); if (sw > 0 && sw < 1) { c.globalAlpha = 1 - sEase(sw); c.strokeStyle = '#bff3ff'; c.lineWidth = r * 0.1 * (1 - sw) + 1;   // flat ground shockwave (not a ring around her like Nebula's)
         c.beginPath(); c.ellipse(cx, cy + r * 1.0, r * (0.6 + sw * 2.2), r * (0.12 + sw * 0.25), 0, 0, TAU); c.stroke(); }
-      const cr = sEase(sClamp(k, 1.45, 1.95)), cf = 1 - sClamp(k, 2.5, 2.6); if (cr > 0 && cf > 0) {   // crown of light: built ON the real contour, descends along the seat normal and settles flush
-        const cn = grokCrown(T, bx, by, r * (P.scale == null ? 1 : P.scale), P.a, P.sx / (P.br || 1), P.sy / (P.br || 1), r * 0.5, r * 0.42), lift = (1 - cr) * r * 1.4, ox = cn.nx * lift, oy = cn.ny * lift;
-        c.globalAlpha = cf * Math.min(1, cr * 2); c.shadowColor = '#ffe9a0'; c.shadowBlur = r * 0.3;
-        const g = c.createLinearGradient(cn.sx + ox + cn.nx * r * 0.42, cn.sy + oy + cn.ny * r * 0.42, cn.sx + ox, cn.sy + oy); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#ffd34d'); c.fillStyle = g;
-        c.beginPath(); for (const [x, y] of cn.top) c.lineTo(x + ox, y + oy); for (let j = cn.base.length - 1; j >= 0; j--) c.lineTo(cn.base[j][0] + ox, cn.base[j][1] + oy); c.closePath(); c.fill(); c.shadowBlur = 0;
-        c.fillStyle = '#7fe0ff'; for (const [x, y] of cn.tips) { c.beginPath(); c.arc(x + ox, y + oy, r * 0.06, 0, TAU); c.fill(); }
-        const hx = cn.sx + ox + cn.nx * r * 0.2, hy = cn.sy + oy + cn.ny * r * 0.2, na = Math.atan2(cn.ny, cn.nx);
-        if (k > 1.9 && k < 2.3) { const q = sClamp(k, 1.9, 2.3); for (let j = 0; j < 5; j++) { const an = na + (j - 2) * 0.5; c.globalAlpha = (1 - q) * cf; c.strokeStyle = '#fff2b0'; c.lineWidth = Math.max(1, r * 0.03);
+      const cr = sEase(sClamp(k, 1.45, 1.95)), cf = sEase(sClamp(k, 1.45, 1.7)) * (1 - sEase(sClamp(k, 2.3, 2.6))); if (cf > 0.002) {   // crown of light: fixed body-local anchor, moves rigidly with the body
+        const L = T.crownL || (T.crownL = grokCrown(T, 0, 0, 1, 0, 1, 1, 0.5, 0.42)), Rr = r * (P.scale == null ? 1 : P.scale), ca = Math.cos(P.a), sa = Math.sin(P.a), qx = P.sx / (P.br || 1), qy = P.sy / (P.br || 1);
+        const W = ([px, py]) => [bx + qx * (px * ca - py * sa) * Rr, by + qy * (px * sa + py * ca) * Rr];
+        let nx = qx * (L.nx * ca - L.ny * sa), ny = qy * (L.nx * sa + L.ny * ca); const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
+        const lift = (1 - cr) * r * 1.4, ox = nx * lift, oy = ny * lift, top = L.top.map(W), base = L.base.map(W), tips = L.tips.map(W), [sx0, sy0] = W([L.sx, L.sy]); if (colDbg) window.__crownPos = [sx0 + ox, sy0 + oy];
+        c.globalAlpha = cf; c.shadowColor = '#ffe9a0'; c.shadowBlur = r * 0.3;
+        const g = c.createLinearGradient(sx0 + ox + nx * r * 0.42, sy0 + oy + ny * r * 0.42, sx0 + ox, sy0 + oy); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#ffd34d'); c.fillStyle = g;
+        c.beginPath(); for (const [x, y] of top) c.lineTo(x + ox, y + oy); for (let j = base.length - 1; j >= 0; j--) c.lineTo(base[j][0] + ox, base[j][1] + oy); c.closePath(); c.fill(); c.shadowBlur = 0;
+        c.fillStyle = '#7fe0ff'; for (const [x, y] of tips) { c.beginPath(); c.arc(x + ox, y + oy, r * 0.06, 0, TAU); c.fill(); }
+        const hx = sx0 + ox + nx * r * 0.2, hy = sy0 + oy + ny * r * 0.2, na = Math.atan2(ny, nx), ra = sEase(sClamp(k, 1.9, 2.0)) * (1 - sEase(sClamp(k, 2.0, 2.4)));
+        if (ra > 0.002) { const q = sClamp(k, 1.9, 2.4); for (let j = 0; j < 5; j++) { const an = na + (j - 2) * 0.5; c.globalAlpha = ra * cf; c.strokeStyle = '#fff2b0'; c.lineWidth = Math.max(1, r * 0.03);
           c.beginPath(); c.moveTo(hx + Math.cos(an) * r * 0.6, hy + Math.sin(an) * r * 0.6); c.lineTo(hx + Math.cos(an) * r * (0.75 + q * 0.4), hy + Math.sin(an) * r * (0.75 + q * 0.4)); c.stroke(); } } }
       c.globalAlpha = 1; break; }
   }
@@ -2746,6 +2759,7 @@ function drawSigFrame(c, i, W, H, seen, R, tt) {
   if (!seen) { c.globalCompositeOperation = 'source-atop'; c.fillStyle = '#0b0b14'; c.fillRect(0, 0, W, H); c.globalCompositeOperation = 'source-over';
     c.fillStyle = 'rgba(255,255,255,.55)'; c.font = `900 ${Math.round(W * 0.12)}px system-ui,sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('?', cx, cy); }
   if (sig) sigFx(c, i, cx, cy, r, k, P, true);
+  if (colDbg && P) window.__bodyPos = [cx + P.dx, cy + P.dy];
   if (colDbg) { const a = P ? P.a : 0, sx = (P ? P.sx : 1) / breathe, sy = (P ? P.sy : 1) / breathe, rr = r * (P && P.scale != null ? P.scale : 1), Q = T.poly;   // debug: collider outline with the body's exact transform
     c.save(); c.translate(cx + (P ? P.dx : 0), cy + (P ? P.dy : 0)); c.scale(sx, sy); c.rotate(a); c.beginPath(); for (let j = 0; j < T.N; j++) c.lineTo(Q[2 * j] * rr, Q[2 * j + 1] * rr); c.closePath(); c.restore();
     c.strokeStyle = '#00ff88'; c.lineWidth = 1.5; c.stroke(); }
