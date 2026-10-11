@@ -248,7 +248,7 @@ const JL = 12, JB = 688; let JR = 408;        // JR = WW - 12           // jar i
 let JT = 128, WALL_TOP = 18, DANGER = 146, DROP_Y = 66;   // top of jar / side-wall tops / game-over line / dropper y
 // tall portrait screens: the jar top (and dropper + danger line) sits LAY_COMPACT lower and the view crops the band above,
 // so the jar is shorter and fills the screen (less dead drop distance). Applied only at restart, never mid-game.
-const LAY_COMPACT = 50, WIDE_WW = 500; let layOff = 0, wantOff = 0, wide = false, wantWide = false, layHinted = false;
+const LAY_COMPACT = 50, WIDE_WW = 460; let layOff = 0, wantOff = 0, wide = false, wantWide = false, layHinted = false;
 const G = 1900, STEP = 1 / 120;
 const MAX_V = 1300, MAX_UP = 700;
 const BEST_KEY = 'grokDrop.best', MUTE_KEY = 'grokDrop.muted';
@@ -264,21 +264,23 @@ function rgba(h, a) { const c = hexRgb(h); return `rgba(${c[0]},${c[1]},${c[2]},
 const TIERS = [
   // mood: resting face. mouth: o | grin | smirk | flat | smile | cat | sleepy | blush | toothy | smug ; lid: 0..1 resting eyelid; brow: -1 grumpy .. +1 surprised
   { name: 'Blip',   shape: 'circle',   r: 14,  c: '#4cc9f0', mouth: 'o',      lid: 0,    brow: 0.6,  blushy: 0 },   // curious baby
-  { name: 'Pilly',  shape: 'pill',     r: 19,  c: '#a3e635', mouth: 'grin',   lid: 0,    brow: 0,    blushy: 0 },   // hyper
-  { name: 'Trix',   shape: 'triangle', r: 25,  c: '#ff8c42', mouth: 'smirk',  lid: 0.25, brow: -1,   blushy: 0 },   // grumpy troublemaker (slapper)
-  { name: 'Cubo',   shape: 'square',   r: 32,  c: '#3d7bff', mouth: 'flat',   lid: 0.15, brow: 0,    blushy: 0 },   // deadpan
-  { name: 'Harry',  shape: 'teardrop', r: 40,  c: '#ff3ec9', mouth: 'smile',  lid: 0,    brow: 0.3,  blushy: 1 },   // sunny
-  { name: 'Hexa',   shape: 'hexagon',  r: 50,  c: '#8b5cf6', mouth: 'cat',    lid: 0.1,  brow: 0,    blushy: 0 },   // cheeky
-  { name: 'Nimbus', shape: 'cloud',    r: 62,  c: '#e6edf7', mouth: 'sleepy', lid: 0.5,  brow: 0,    blushy: 1 },   // dozy
-  { name: 'Bloom',  shape: 'flower',   r: 76,  c: '#2ee6b8', mouth: 'blush',  lid: 0,    brow: 0.4,  blushy: 1 },   // shy
-  { name: 'Luna',   shape: 'moon',     r: 92,  c: '#cbd5e8', mouth: 'smile',  lid: 0.48, brow: 0,    blushy: 0.6, luna: true },   // sleepy, gentle silver moon (replaced Orbit; same slot / radius / stats index)
+  { name: 'Pilly',  shape: 'pill',     r: 17,  c: '#a3e635', mouth: 'grin',   lid: 0,    brow: 0,    blushy: 0 },   // hyper
+  { name: 'Trix',   shape: 'triangle', r: 21,  c: '#ff8c42', mouth: 'smirk',  lid: 0.25, brow: -1,   blushy: 0 },   // grumpy troublemaker (slapper)
+  { name: 'Cubo',   shape: 'square',   r: 26,  c: '#3d7bff', mouth: 'flat',   lid: 0.15, brow: 0,    blushy: 0 },   // deadpan
+  { name: 'Harry',  shape: 'teardrop', r: 32,  c: '#ff3ec9', mouth: 'smile',  lid: 0,    brow: 0.3,  blushy: 1 },   // sunny
+  { name: 'Hexa',   shape: 'hexagon',  r: 39,  c: '#8b5cf6', mouth: 'cat',    lid: 0.1,  brow: 0,    blushy: 0 },   // cheeky
+  { name: 'Nimbus', shape: 'cloud',    r: 48,  c: '#e6edf7', mouth: 'sleepy', lid: 0.5,  brow: 0,    blushy: 1 },   // dozy
+  { name: 'Bloom',  shape: 'flower',   r: 59,  c: '#2ee6b8', mouth: 'blush',  lid: 0,    brow: 0.4,  blushy: 1 },   // shy
+  { name: 'Nebula', shape: 'nebula',   r: 73,  c: '#2c1d66', mouth: 'smile',  lid: 0.2,  brow: 0.1,  blushy: 0.4, nebula: true },   // dreamy, mysterious cosmic cloud (inserted v20)
+  { name: 'Luna',   shape: 'moon',     r: 90,  c: '#cbd5e8', mouth: 'smile',  lid: 0.48, brow: 0,    blushy: 0.6, luna: true },   // sleepy, gentle silver moon (replaced Orbit; same slot / radius / stats index)
   { name: 'Grok',   shape: 'pebble',   r: 110, c: '#0b0b0d', grok: true, mouth: 'smug', lid: 0.2, brow: 0, blushy: 0 }, // cool
 ];
 const TOP = TIERS.length - 1;
 // per-tier rolling: [slow damp/substep, fast damp/substep, spin cap k (x v/r), cap offset]. Was 0.97 / 0.993 / 1.2 / 0.5 for everyone.
-const ROUNDISH = new Set(['circle', 'pill', 'hexagon', 'cloud', 'flower', 'moon', 'pebble']);
+const ROUNDISH = new Set(['circle', 'pill', 'hexagon', 'cloud', 'flower', 'moon', 'pebble', 'nebula']);
 const ROLL = TIERS.map(T => ROUNDISH.has(T.shape) ? [0.99, 0.999, 2.3, 1.8] : [0.98, 0.996, 1.5, 0.9]);
-const POINTS = [1, 3, 6, 10, 15, 21, 28, 36, 45, 55];
+const POINTS = [1, 2, 3, 5, 7, 10, 14, 19, 25, 32, 40];   // x PTS_K per merge (v20: scaled down; was x10 of 1..55)
+const PTS_K = 8, COMBO_MAX = 4;   // tuned by headless sims: good long Classic runs ~20-30k
 const SPAWN_W = [30, 26, 20, 14, 10];
 
 // ---------------------------------------------------------------- shape geometry (unit radius)
@@ -299,6 +301,7 @@ function centerPts(pts) {
 function shapePoints(shape) {
   switch (shape) {
     case 'circle': return smoothRadial(() => 1, 96, 0);
+    case 'nebula': return smoothRadial(() => 1, 120, 0);   // plain circle = visible edge (gas swirl + halo are drawing only)
     case 'moon': return smoothRadial(() => 1, 120, 0);   // plain circle = the visible body edge (halo is drawing only)
     case 'pill': { const pts = [], hw = 1, hh = 0.72, rr = hh;
       for (let i = 0; i < 120; i++) { const t = i / 120 * TAU; const cx = Math.cos(t) >= 0 ? hw - rr : -(hw - rr); pts.push([cx + Math.cos(t) * rr, Math.sin(t) * rr]); } return pts; }
@@ -442,7 +445,7 @@ function buildCollision(T) {
 
 // eye placement per shape (unit space): y offset, half-spacing, size scale
 const EYES = { circle: [-0.08, 0.3, 1], pill: [-0.06, 0.3, 0.95], triangle: [0.12, 0.24, 0.85], square: [-0.06, 0.3, 1], teardrop: [0.2, 0.26, 0.9],
-  hexagon: [-0.05, 0.3, 1], cloud: [0.0, 0.3, 0.95], heart: [-0.08, 0.3, 0.95], flower: [-0.04, 0.26, 0.9], star: [0.06, 0.22, 0.85], moon: [-0.04, 0.26, 0.95], pebble: [-0.1, 0.27, 1.05] };
+  hexagon: [-0.05, 0.3, 1], cloud: [0.0, 0.3, 0.95], heart: [-0.08, 0.3, 0.95], flower: [-0.04, 0.26, 0.9], star: [0.06, 0.22, 0.85], moon: [-0.04, 0.26, 0.95], nebula: [-0.05, 0.27, 0.95], pebble: [-0.1, 0.27, 1.05] };
 for (const T of TIERS) {
   T.pts = shapePoints(T.shape);
   buildCollision(T);
@@ -452,6 +455,7 @@ for (const T of TIERS) {
   T.rim = T.grok ? 'rgba(255,255,255,.9)' : mix(T.c, '#000000', 0.45);
   T.eye = T.grok || T.shape === 'heart' || T.shape === 'hexagon' || T.shape === 'square' ? '#ffffff' : '#101114';
   T.e = EYES[T.shape];
+  if (T.nebula) { T.hi = '#5a3aa8'; T.lo = '#140c3a'; T.rim = '#c79bff'; T.eye = '#ffffff'; }   // deep indigo base; the swirl adds pink/magenta/violet
   if (T.luna) { T.hi = '#eef3fb'; T.lo = '#93a2c0'; T.rim = '#c4d2ea'; T.eye = '#2a3246'; }   // cool blue-silver moon (vs Nimbus' warm bright white)
 }
 
@@ -474,7 +478,7 @@ let aimX = WW / 2, aiming = false, dropCD = 0, readyAnim = 1, dropQ = false;
 const DROP_CD = 0.3;
 let nudge = { x: 0, y: 0, t: 0 }, overT = -1, overBot = null, dangerBot = null, runMerges = 0, overInfo = null;
 const OVER_FREEZE = 1.0, COMBO_WIN = 1.1;   // combo chain window (was 0.6 s)
-let state = 'playing', dangerT = 0, combo = 0, comboT = 9;
+let state = 'playing', dangerT = 0, combo = 0, comboT = 9, comboChain = 0, dropSeq = 0, runBest = 0;
 let shake = 0, flash = 0, time = 0;
 let tainted = false, edTool = 'place', edTier = 0, modalOpen = false, hoverW = null;
 let muted = false; try { muted = localStorage.getItem(MUTE_KEY) === '1'; } catch (e) {}
@@ -496,7 +500,12 @@ let ceilY = 2, zenT = 0, zenCleared = 0, menuOpen = false, menuPausedIt = false;
 function bestKey() { return MODES[mode].best; }
 
 function spawnWeights(max = SPAWN_W.length) {   // adapts with progress: fewer Blips once Nimbus+ is reached
-  const w = SPAWN_W.slice(0, max); if (topReached >= 6) w[0] *= 0.55; else if (topReached >= 5) w[0] *= 0.8; return w;
+  // v20 harder: as the ladder climbs, fewer free Blips and more Cubo/Harry drops
+  const w = SPAWN_W.slice(0, max);
+  if (topReached >= 6) { w[0] *= 0.45; w[1] *= 0.8; if (w[3]) w[3] *= 1.25; if (w[4]) w[4] *= 1.45; }   // Nimbus+
+  else if (topReached >= 5) { w[0] *= 0.65; if (w[4]) w[4] *= 1.2; }   // Hexa
+  else if (topReached >= 4) w[0] *= 0.85;   // Harry
+  return w;
 }
 function randTier(max) {
   const W = spawnWeights(max), tot = W.reduce((a, b) => a + b, 0); let r = Math.random() * tot;
@@ -552,6 +561,7 @@ const sfx = {
     const wv = waves[tier % waves.length], v = wv === 'square' || wv === 'sawtooth' ? 0.06 : 0.22;
     tone(base, base * 2, 0.08, wv, v); tone(base * 1.5, base * 1.5, 0.16, 'sine', 0.14, 0.05); tone(base * 0.5, base * 0.75, 0.2, 'sine', 0.2);
     noise(0.05, 2000 + tier * 300, 0.08);
+    if (TIERS[tier] && TIERS[tier].nebula) { [784, 1175, 1568, 2349].forEach((f, j) => tone(f, f * 1.006, 1.2 - j * 0.2, 'sine', 0.045, j * 0.07)); tone(392, 396, 1.4, 'triangle', 0.025); }   // Nebula: shimmering ethereal chime
     if (TIERS[tier] && TIERS[tier].luna) { [1046, 1568, 2093].forEach((f, j) => tone(f, f, 1.1 - j * 0.2, 'sine', 0.06 - j * 0.012, j * 0.05)); tone(523, 523, 1.2, 'triangle', 0.03); }   // Luna: soft bell
   },
   shake() { noise(1.3, 90, 0.32, 'lowpass', 260); noise(1.1, 400, 0.08, 'bandpass', 900); tone(48, 30, 1.2, 'sine', 0.35); tone(72, 40, 1.0, 'sawtooth', 0.05); },
@@ -578,9 +588,24 @@ const ICON_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stro
 const ICON_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>';
 // ---------------------------------------------------------------- lifetime stats (collection room)
 const STATS_KEY = 'grokDrop.stats';
+// stats arrays are positional; saves record the tier names they were written with, so inserting/reordering tiers later remaps
+// counts to the right bots by name (a new tier starts at 0). Saves without names use the legacy 10-tier order (tier 8 slot =
+// Nova -> Ember -> Orbit -> Luna: same bot slot, counts carry over).
+const LEGACY_TIER_NAMES = ['Blip', 'Pilly', 'Trix', 'Cubo', 'Harry', 'Hexa', 'Nimbus', 'Bloom', 'Luna', 'Grok'];
+function migrateStats(o) {
+  const names = Array.isArray(o.tierNames) && o.tierNames.length ? o.tierNames.slice() : LEGACY_TIER_NAMES.slice();
+  for (const k of ['made', 'dropped', 'slapGiven', 'slapTaken']) {
+    if (!Array.isArray(o[k])) continue; const old = o[k];
+    o[k] = TIERS.map(T => { const i = names.indexOf(T.name); return i >= 0 ? (old[i] | 0) : 0; });
+  }
+  o.tierNames = TIERS.map(T => T.name);
+}
+// radii for an n-tier ladder on an even ratio, Blip 14 -> Grok 110 (ready for the 11-tier lineup; the current 10 keep their tuned radii)
+function radiiFor(n, r0 = 14, r1 = 110) { return Array.from({ length: n }, (_, i) => Math.round(r0 * Math.pow(r1 / r0, i / (n - 1)))); }
 function loadStats() {
   let o = null; try { o = JSON.parse(localStorage.getItem(STATS_KEY)); } catch (e) {}
   if (!o || typeof o !== 'object') o = {};
+  migrateStats(o);
   for (const k of ['made', 'dropped', 'slapGiven', 'slapTaken']) { if (!Array.isArray(o[k])) o[k] = []; while (o[k].length < TIERS.length) o[k].push(0); o[k] = o[k].map(v => Math.max(0, v | 0)); }
   o.singularities = Math.max(0, o.singularities | 0); o.wishes = Math.max(0, o.wishes | 0); o.shakes = Math.max(0, o.shakes | 0); return o;
 }
@@ -649,13 +674,15 @@ let CEIL = 2;                  // invisible ceiling y
 function applyLayout(off, wd = wide) { wide = wd; WW = wd ? WIDE_WW : 420; JR = WW - 12; layOff = off; JT = 128 + off; WALL_TOP = 18 + off; DANGER = 146 + off; DROP_Y = 66 + off; FLIP_TOP = 22 + off; CEIL = 2 + off; }
 const SLOP = 0.5;              // contact detection margin (world units)
 const MERGE_GAP = 0.6;         // same-tier bots merge when within this distance (i.e. touching)
+const FACE_SYM = { square: Math.PI / 2, hexagon: Math.PI / 3 };   // flat-face rest angles (settle-to-face)
 const MU_D = 0.9;  const REST = 0.25, BOUNCE_MIN = 140;  // bounce only on real impacts
 const SLEEP_V = 10, SLEEP_W = 0.2, SLEEP_T = 0.3;  // settled bots fall asleep (frozen) until disturbed
 //               // friction (velocity level; positional static friction ratcheted bots up walls)
 const SPAWN_FX = 0.15, SPREAD_T = 0.35, SPREAD_CAP = 0.3, SPREAD_W = 0.25;   // merge spawn: visual pop time, push-out window, per-pass cap (u), new-bot mobility
 const FACE_COS = 0.9986, WALL_BAND = 0.5, MASS_RATIO = 2, POS_ITERS = 12, PAIR_CAP = 24;
 const PUSH_FREE = 0.0;           // overlap beyond this is resolved without injecting velocity
-const SHAKE_MAX = 3, SHAKE_T = 1.1, SHAKE_CALM = 2.0, SHAKE_ZEN_CD = 2.5, SHAKE_KICKS = 6, SHAKE_GAP = 0.16, SHAKE_MAX_UP = 1000;
+const DANGER_T = 1.7;   // v20: overflow countdown (was 2.2 s)
+const SHAKE_MAX = 2, SHAKE_T = 1.1, SHAKE_CALM = 1.2, SHAKE_ZEN_CD = 2.5, SHAKE_KICKS = 6, SHAKE_GAP = 0.16, SHAKE_MAX_UP = 1000;
 let shakeCharges = 1, shakeT = 0, shakeCalm = 0, shakeCD = 0, shakePulse = 0, shakeDir = 1;
 let physPaused = false, runId = 0, escapes = 0, dangerOver = false;   // runId: stale game-over timers from an earlier run are ignored        // editor: freeze physics
 const cpool = []; let ccount = 0;
@@ -1068,12 +1095,19 @@ function step(dt) {
     if (!b.nc || b.perched) b.ctime = 0; else if ((b.ctime = (b.ctime || 0) + dt) > 2.2) { const k = Math.exp(-7 * dt * Math.min(1, (b.ctime - 2.2) / 0.4)); b.vx *= k; b.vy *= k; b.w *= k; }  // contact fatigue: long-lived contacts settle
     // a round bot perched on ONE tilted support (dome peak / shoulder) must keep rolling, never doze off balanced
     const perched = b.perched;
-    if (b.nc && b.mv < SLEEP_V && Math.abs(b.w) < SLEEP_W * 3 && !(b.pen > 0.5) && !perched) {   /* never freeze with residual overlap */ b.st += dt; if (b.st > SLEEP_T) sleepBody(b); }
+    // settle-to-face: a slow flat-sided bot (square / hexagon) resting a few degrees off a face eases flat (velocity-free).
+    // Its rounded corners give almost no restoring torque at small tilts, so small bots (v20 radii) used to doze off crooked.
+    let tilt = 0; const sym = FACE_SYM[TIERS[b.t].shape];
+    if (sym && b.nc && !perched && shakeT <= 0 && gy > 0.999 && b.y1 > JB - 2 && b.x0 > JL + 2 && b.x1 < JR - 2) {   // only on the floor, clear of the side walls
+      const res = b.a - Math.round(b.a / sym) * sym;
+      if (Math.abs(res) < 0.12 && b.mv < 30 && Math.abs(b.w) < 0.8) { b.a -= Math.sign(res) * Math.min(Math.abs(res), 0.8 * dt); b.w *= 0.6; updateWorld(b); tilt = Math.abs(res); }
+    }
+    if (b.nc && b.mv < SLEEP_V && Math.abs(b.w) < SLEEP_W * 3 && !(b.pen > 0.5) && !perched && tilt < 0.006) {   /* never freeze with residual overlap */ b.st += dt; if (b.st > SLEEP_T) sleepBody(b); }
     else b.st = 0;
     // oscillation guard: in contact but going nowhere over 1 s (e.g. wedged and vibrating) -> rest
     b.ct += dt;
     if (b.ct >= 1.0) {
-      if (!b.sleep && b.nc && !(b.pen > 0.5) && !perched && Math.hypot(b.x - b.ax, b.y - b.ay) < Math.max(3, 0.5 * b.r)) sleepBody(b);  // spinning in place counts as stuck
+      if (!b.sleep && b.nc && !(b.pen > 0.5) && !perched && tilt < 0.006 && Math.hypot(b.x - b.ax, b.y - b.ay) < Math.max(3, 0.5 * b.r)) sleepBody(b);  // spinning in place counts as stuck
       b.ct = 0; b.ax = b.x; b.ay = b.y; b.aa = b.a;
     }
   }
@@ -1104,13 +1138,19 @@ function step(dt) {
   dangerOver = over && state === 'playing' && !finale && mode !== 'zen';
   if (state === 'playing' && !finale && mode !== 'zen') {
     if (shakeCalm > 0) {}
-    else if (over) { const prev = dangerT; dangerT += dt; const bpm = k => Math.floor(k * (1.6 + k * 0.9)); if (bpm(prev) !== bpm(dangerT)) { sfx.heart(dangerT / 2.2); haptic('heart'); } }   // heartbeat speeds up as the countdown runs out
+    else if (over) { const prev = dangerT; dangerT += dt; const bpm = k => Math.floor(k * (1.6 + k * 0.9)); if (bpm(prev) !== bpm(dangerT)) { sfx.heart(dangerT / DANGER_T); haptic('heart'); } }   // heartbeat speeds up as the countdown runs out
     else dangerT = Math.max(0, dangerT - dt * 2);
-    if (dangerT > 2.2) gameOver();
+    if (dangerT > DANGER_T) gameOver();
   } else dangerT = 0;
 }
 function land(b) { b.landed = true; const v = Math.hypot(b.vx, b.vy); if (v > 250) { sfx.land(v); b.pop = Math.max(b.pop, 0.35); if (!b.expr) react(b, 'squint', 0.35); } }
 function react(b, e, d) { b.expr = e; b.exprT = d; }
+function stardust(x, y, n = 10, spd = 120) { for (let i = 0; i < n; i++) { const a = Math.random() * TAU, v = spd * (0.3 + Math.random() * 0.7); particles.push({ type: 'spark', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 20, life: 0, max: 0.9 + Math.random() * 0.8, size: 1.6 + Math.random() * 2, rot: Math.random() * TAU, vr: 0, color: ['#ffb3f0', '#c79bff', '#9fb4ff', '#ffffff'][i % 4] }); } }
+function nebulaTick(b, dt) {   // Nebula: glow fade; an occasional sparkle-sigh
+  if (b.glint > 0) b.glint = Math.max(0, b.glint - dt * 0.6);
+  b.sighT = (b.sighT ?? 7 + Math.random() * 9) - dt;
+  if (b.sighT <= 0) { b.sighT = 10 + Math.random() * 12; if (!b.expr && state === 'playing') { react(b, 'smile', 1.2); stardust(b.x, b.y - b.r * 0.6, 7, 50); if (!muted) tone(660, 520, 0.6, 'sine', 0.025); } }
+}
 function lunaTick(b, dt) {   // Luna: made-glow fades; sleepy yawns; a soft hum now and then
   if (b.glint > 0) b.glint = Math.max(0, b.glint - dt * 0.6);
   b.yawnT = (b.yawnT ?? 5 + Math.random() * 8) - dt;
@@ -1168,11 +1208,12 @@ function placeSpawn(nb, a, b) {
 }
 function doMerge(a, b) {
   const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;   // equal tiers: the centre midpoint is the contact midpoint
-  (comboT < COMBO_WIN && combo > 0) ? combo++ : (combo = 1); comboT = 0;
-  const mult = 1 + (combo - 1) * 0.5;
+  const ch = Math.max(a.chain || 0, b.chain || 0);   // which drop this merge descends from
+  (comboT < COMBO_WIN && combo > 0 && ch && ch === comboChain) ? combo++ : (combo = 1); comboT = 0; comboChain = ch;
+  const mult = Math.min(COMBO_MAX, 1 + 0.6 * Math.sqrt(combo - 1));   // x1, 1.6, 1.85, 2.04 ... capped at x4
   if (a.t === TOP) { startFinale(a, b, x, y, mult); return; }
   const nt = a.t + 1, T = TIERS[nt];
-  const nb = makeBot(nt, x, y, (a.a + b.a) / 2);
+  const nb = makeBot(nt, x, y, (a.a + b.a) / 2); nb.chain = ch;
   nb.vx = (a.vx + b.vx) / 4; nb.vy = Math.max(-80, (a.vy + b.vy) / 4 - 40);   // calm hand-off (no inherited launch)
   nb.w = Math.max(-4, Math.min(4, (a.w + b.w) / 2));   // inherits (capped) spin; linear anti-launch limiter unaffected
   // full physical size from the first frame; only the drawing pops (1.0 -> 1.12 -> 1.0 over 0.15 s)
@@ -1182,12 +1223,13 @@ function doMerge(a, b) {
   placeSpawn(nb, a, b); bots.push(nb); stat('made', nt); if (state === 'playing') runMerges++;
   for (const o of bots) if (o !== nb && !(o.x0 > nb.x1 + 4 || nb.x0 > o.x1 + 4 || o.y0 > nb.y1 + 4 || nb.y0 > o.y1 + 4)) wake(o);
   if (firstEver) { $('colBtn').classList.add('new'); setTimeout(() => toastQueued('ADDED TO COLLECTION: ' + T.name.toUpperCase()), 30); }   // queued: shows after the NEW BOT toast
-  const pts = Math.round(POINTS[nt] * 10 * mult); addScore(pts);
+  const pts = Math.round(POINTS[nt] * PTS_K * mult); addScore(pts);
   burst(x, y, TIERS[a.t].c, 10 + nt * 2, 190 + nt * 25, 2.4 + nt * 0.3);
   burst(x, y, '#ffffff', 5 + nt, 150 + nt * 20, 1.8);
   ring(x, y, T.r * 1.45, T.grok ? '#ffffff' : T.c);
   floatText(x, y - T.r * 0.3, '+' + pts, 16 + nt * 1.4, '#ffffff');
   sfx.merge(nt, combo); haptic('merge', nt);
+  if (T.nebula) { nb.glint = 1; stardust(x, y, 26, 260); ring(x, y, T.r * 1.7, '#e4a8ff'); }   // starburst bloom
   if (T.luna) { nb.glint = 1; for (let i = 0; i < 10; i++) floatSpark(nb); }   // Luna: glow brightens + drifting moon sparkles
   shake = Math.max(shake, 1.5 + nt * 1.1);   // shake scales with merge size
   for (const o of bots) if (o !== nb && Math.hypot(o.x - x, o.y - y) < T.r * 2.2) { o.look = { x, y, t: 0.8 }; if (!o.expr) react(o, 'happy', 0.5); }
@@ -1218,7 +1260,7 @@ let finale = null;
 const FIN_T = 3.6, FIN_BOOM = 3.1;
 function startFinale(a, b, x, y, mult) {
   if (!tainted && state === 'playing') { stats.singularities++; saveStats(); }
-  const pts = Math.round(5000 * mult); addScore(pts);
+  const pts = Math.round(1500 * mult); addScore(pts);   // v20: was 5000
   const cx = Math.max(JL + 140, Math.min(JR - 140, x)), cy = Math.max(JT + 170, Math.min(JB - 150, y));
   const sw = [];
   for (const o of bots) { if (o === a || o === b || o.dead) continue;
@@ -1238,7 +1280,7 @@ function updateFinale(dt) {
     const e = k * k * (3 - 2 * k), d = s.d0 * (1 - e);
     s.ang += dt * (1.5 + 7 * e); s.spin += dt * (2 + 10 * e);
     s.x = F.x + Math.cos(s.ang) * d; s.y = F.y + Math.sin(s.ang) * d * 0.85; s.sc = 1 - e * 0.95;
-    if (k >= 1) { s.done = true; const bonus = POINTS[s.t] * 20; F.bonus += bonus; addScore(bonus);
+    if (k >= 1) { s.done = true; const bonus = POINTS[s.t] * 8; F.bonus += bonus; addScore(bonus);
       finLabel(F, '+' + bonus, TIERS[s.t].grok ? '#ffffff' : TIERS[s.t].c);
       burst(F.x, F.y, TIERS[s.t].grok ? '#ffffff' : TIERS[s.t].c, 5, 120, 2); sfx.suck(s.t); }
   }
@@ -1247,7 +1289,7 @@ function updateFinale(dt) {
     particles.push({ type: 'shock', x: F.x, y: F.y, r: 760, life: 0, max: 1.1, color: '#ffffff' });
     particles.push({ type: 'shock', x: F.x, y: F.y, r: 480, life: 0, max: 0.8, color: '#a78bfa' });
     burst(F.x, F.y, '#ffffff', 90, 700, 4); burst(F.x, F.y, '#ffb347', 40, 500, 3); burst(F.x, F.y, '#8b5cf6', 40, 450, 3);
-    for (const s of F.sw) if (!s.done) { s.done = true; const bonus = POINTS[s.t] * 20; F.bonus += bonus; addScore(bonus); }
+    for (const s of F.sw) if (!s.done) { s.done = true; const bonus = POINTS[s.t] * 8; F.bonus += bonus; addScore(bonus); }
     finEnd = { t: 0, total: F.base + F.bonus, x: F.x, y: F.y };
   }
   for (const L of F.labels) L.life += dt; F.labels = F.labels.filter(L => L.life < L.max);
@@ -1332,14 +1374,14 @@ function drawFinale(c) {
 function drop() {
   if (!canDrop()) { if (state === 'playing' && dropCD > 0 && !finale && dropRoom(true)) dropQ = true; return false; }   // tap during cooldown: buffered (one), fires when ready
   dropQ = false;
-  const b = makeBot(curTier, clampAim(aimX), DROP_Y, 0); b.vy = 120; stat('dropped', b.t); react(b, 'happy', 0.7); b.pop = 0.5;
+  const b = makeBot(curTier, clampAim(aimX), DROP_Y, 0); b.vy = 120; b.chain = ++dropSeq; stat('dropped', b.t); react(b, 'happy', 0.7); b.pop = 0.5;
   bots.push(b);
   curTier = nextTier; nextTier = randTier(); drawNext();
   dropCD = DROP_CD; readyAnim = 0; sfx.drop(); haptic('drop');
   return true;
 }
 const SHARE_URL = 'https://auggiepeery.github.io/grok-drop/play/';
-const TIER_EMOJI = ['🔵', '🟢', '🔺', '🟦', '💗', '🟣', '☁️', '🌸', '🌕', '⚫'];
+const TIER_EMOJI = ['🔵', '🟢', '🔺', '🟦', '💗', '🟣', '☁️', '🌸', '🌌', '🌕', '⚫'];
 // "how close": the two biggest bots on the board; growing the 2nd up to the biggest and merging them reaches the next tier
 function closeness(list, top = topReached) {   // merges still needed for the next tier: grow the two biggest bots (<= best tier) to it, then merge them
   if (top >= TOP) return { next: TOP, merges: 0 };
@@ -1365,9 +1407,10 @@ function drawTierRow(cv, top) {
   for (let i = 0; i < n; i++) { const r = Math.min(cw, H) * (0.26 + 0.2 * i / (n - 1)); oc.save(); oc.globalAlpha = i <= top ? 1 : 0.22; if (i > top) oc.filter = 'grayscale(1)'; drawBot(oc, i, cw * (i + 0.5), H / 2, r, { a: 0, happy: i <= top ? 1 : 0 }); oc.restore(); }
 }
 function gameOver() {
+  if (state === 'over') return;   // never double-schedule
   state = 'over'; sfx.over(); haptic('over'); shake = 10; aiming = false; dropQ = false;
   overT = 0; overBot = dangerBot || bots.reduce((m, b) => !m || b.y0 < m.y0 ? b : m, null);   // jar freezes; the culprit is highlighted first
-  const isBest = !tainted && score > best && score > 0;
+  const isBest = !tainted && score > runBest && score > 0;
   if (!tainted && score > best) { best = score; store(bestKey(), best); }
   const cl = closeness(bots);
   overInfo = { score, best, top: topReached, merges: runMerges, mode, next: cl.next, need: cl.merges };
@@ -1378,7 +1421,10 @@ function gameOver() {
     b.dead = true; burst(b.x, b.y, TIERS[b.t].c, 8, 200, 3); bots = bots.filter(o => !o.dead); sfx.merge(b.t, 1);
   }, F + i * per));
   setTimeout(() => {
-    if (rid !== runId || state !== 'over') return;
+    if (rid !== runId) return;   // only a restart cancels the card: PLAY AGAIN must always appear after a game over
+    if (state !== 'over') state = 'over';
+    overEl.classList.remove('hidden');
+    try {
     $('finalScore').textContent = score; $('finalBest').textContent = best; $('overMode').textContent = (tainted ? 'EDITOR RUN · ' : '') + MODES[mode].name.toUpperCase();
     $('newBest').textContent = isBest ? '★ NEW BEST ★' : (tainted ? 'EDITOR RUN · BEST NOT SAVED' : '');
     $('overTop').textContent = 'Biggest bot: ' + TIERS[topReached].name;
@@ -1387,7 +1433,7 @@ function gameOver() {
     const oc = $('overBot').getContext('2d'); oc.clearRect(0, 0, 180, 180);
     drawBot(oc, topReached, 90, 92, 62, { a: 0, happy: 1 });
     drawTierRow($('overRow'), topReached);
-    overEl.classList.remove('hidden');
+    } catch (e) { console.warn('game-over card', e); }
   }, F + Math.min(list.length * per, 600) + 200);   // card <= 0.8 s after the freeze
 }
 function restart() {
@@ -1398,6 +1444,7 @@ function restart() {
   if (layoutPending()) { applyLayout(wantOff, wantWide); resize(); } layHinted = false;
   ceilY = mode === 'flip' ? FLIP_TOP : CEIL;
   try { best = +(localStorage.getItem(bestKey()) || 0) || 0; } catch (e) { best = 0; }
+  runBest = best;   // NEW BEST compares with the best from before this run (addScore raises best live)
   applyMode();
   curTier = randTier(3); nextTier = randTier();
   scoreEl.textContent = '0'; bestEl.textContent = best;
@@ -1538,7 +1585,26 @@ document.addEventListener('dblclick', e => e.preventDefault());
 
 // ================================================================ rendering: characters
 // o: { a: angle, s:[sx,sy], lx, ly (look dir, world), blink 0..1, happy, alpha, glow }
-function floatSpark(b) { const a = Math.random() * TAU, d = b.r * (0.6 + Math.random() * 0.6); particles.push({ type: 'spark', x: b.x + Math.cos(a) * d, y: b.y + Math.sin(a) * d, vx: (Math.random() - 0.5) * 20, vy: -15 - Math.random() * 25, life: 0, max: 1.4 + Math.random() * 0.8, size: 2 + Math.random() * 2, rot: Math.random() * TAU, color: '#eef3ff' }); }
+function floatSpark(b) { const a = Math.random() * TAU, d = b.r * (0.6 + Math.random() * 0.6); particles.push({ type: 'spark', x: b.x + Math.cos(a) * d, y: b.y + Math.sin(a) * d, vx: (Math.random() - 0.5) * 20, vy: -15 - Math.random() * 25, life: 0, max: 1.4 + Math.random() * 0.8, size: 2 + Math.random() * 2, rot: Math.random() * TAU, vr: 0, color: '#eef3ff' }); }
+let NEB_CV = null;   // cached nebula gas swirl (built once, drawn rotated + clipped): cheap per frame
+function nebulaLayer() {
+  if (NEB_CV) return NEB_CV; const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d');
+  g.fillStyle = '#1a1050'; g.fillRect(0, 0, S, S);
+  const blobs = [[0.35, 0.35, 0.42, '255,80,200'], [0.68, 0.42, 0.38, '150,90,255'], [0.45, 0.7, 0.4, '60,70,210'], [0.72, 0.72, 0.28, '255,120,170'], [0.25, 0.62, 0.26, '200,80,255'], [0.55, 0.22, 0.24, '110,170,255']];
+  g.globalCompositeOperation = 'lighter';
+  for (const [x, y, r, col] of blobs) { const gr = g.createRadialGradient(x * S, y * S, 0, x * S, y * S, r * S); gr.addColorStop(0, `rgba(${col},.55)`); gr.addColorStop(1, `rgba(${col},0)`); g.fillStyle = gr; g.fillRect(0, 0, S, S); }
+  g.globalCompositeOperation = 'source-over'; g.strokeStyle = 'rgba(255,190,240,.18)'; g.lineWidth = 6;
+  for (let k = 0; k < 3; k++) { g.beginPath(); for (let i = 0; i <= 60; i++) { const a = i / 60 * TAU * 1.3 + k * 2.1, rr = S * (0.08 + 0.32 * i / 60); g.lineTo(S / 2 + Math.cos(a) * rr, S / 2 + Math.sin(a) * rr); } g.stroke(); }
+  return (NEB_CV = cv);
+}
+const NEB_STARS = Array.from({ length: 14 }, (_, i) => [Math.cos(i * 2.4) * Math.sqrt((i + 0.5) / 14) * 0.85, Math.sin(i * 2.4) * Math.sqrt((i + 0.5) / 14) * 0.85, i * 1.7]);
+function drawNebulaHalo(c, r, o) { const k = 1 + 1.2 * Math.max(0, o.glint || 0), g = c.createRadialGradient(0, 0, r * 0.8, 0, 0, r * 1.38); g.addColorStop(0, `rgba(210,120,255,${Math.min(0.55, 0.2 * k)})`); g.addColorStop(1, 'rgba(120,80,255,0)'); c.fillStyle = g; c.beginPath(); c.arc(0, 0, r * 1.45, 0, TAU); c.fill(); }
+function drawNebulaGas(c, a, tt) {   // unit frame, clipped to the body: slowly drifting swirl + twinkling star specks
+  c.save(); c.rotate(-a + tt * 0.12); c.globalAlpha *= 0.95; c.drawImage(nebulaLayer(), -1.05, -1.05, 2.1, 2.1); c.restore();
+  c.save(); c.rotate(-a);
+  for (const [x, y, ph] of NEB_STARS) { const tw = 0.35 + 0.65 * Math.max(0, Math.sin(tt * 2.2 + ph)); c.fillStyle = `rgba(255,255,255,${tw})`; c.beginPath(); c.arc(x, y, 0.018 + 0.012 * tw, 0, TAU); c.fill(); }
+  c.restore();
+}
 function drawLunaHalo(c, r, o) {   // moonlight glow, drawing only (never collides)
   const k = 1 + 1.4 * Math.max(0, o.glint || 0), g = c.createRadialGradient(0, 0, r * 0.85, 0, 0, r * (1.3 + 0.12 * (k - 1)));
   g.addColorStop(0, `rgba(205,222,255,${Math.min(0.6, 0.22 * k)})`); g.addColorStop(1, 'rgba(205,222,255,0)'); c.fillStyle = g; c.beginPath(); c.arc(0, 0, r * 1.5, 0, TAU); c.fill();
@@ -1555,6 +1621,7 @@ function drawBot(c, t, x, y, r, o = {}) {
   c.translate(x, y);
   if (o.alpha != null) c.globalAlpha = o.alpha;
   if (T.luna) drawLunaHalo(c, r, o);
+  if (T.nebula) drawNebulaHalo(c, r, o);
   // soft glow halo (Grok tier always glows)
   if (T.grok || o.glow) {
     const g = c.createRadialGradient(0, 0, r * 0.7, 0, 0, r * 1.5);
@@ -1576,9 +1643,11 @@ function drawBot(c, t, x, y, r, o = {}) {
   c.save(); c.clip(T.path);
   if (T.grok) { c.shadowColor = 'rgba(255,255,255,.9)'; c.shadowBlur = 10; }
   if (T.luna) { c.shadowColor = 'rgba(220,232,255,.9)'; c.shadowBlur = 8; }
+  if (T.nebula) { c.shadowColor = 'rgba(220,150,255,.9)'; c.shadowBlur = 8; }
   c.lineWidth = 2 * (T.grok ? 2.2 : 2.4) / r; c.strokeStyle = T.rim; c.stroke(T.path);
   c.restore(); c.shadowBlur = 0;
   if (T.luna) { c.save(); c.clip(T.path); drawLunaCraters(c); c.restore(); }
+  if (T.nebula) { c.save(); c.clip(T.path); drawNebulaGas(c, a, o.t || 0); c.restore(); }
   // glossy highlight
   c.save(); c.clip(T.path);
   c.globalAlpha *= T.grok ? 0.22 : 0.38;
@@ -1626,6 +1695,7 @@ function drawBot(c, t, x, y, r, o = {}) {
     c.save(); c.translate(0.55, -0.62); c.scale(1 / r, 1 / r); c.globalAlpha *= k; const fs = Math.max(10, r * 0.5) * (1 + 0.12 * Math.sin((o.t || 0) * 12));
     c.font = `${fs}px system-ui,"Apple Color Emoji","Segoe UI Emoji",sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('💢', 0, 0); c.restore(); }
   // sweat drop
+  if (T.nebula && r > 9 && !o.blink) { c.fillStyle = '#fff'; for (const sx of [-es, es]) { const cx = sx + 0.06 * ez, cy = ey - 0.1 * ez, q = 0.07 * ez; c.beginPath(); c.moveTo(cx, cy - q); c.lineTo(cx + q * 0.25, cy - q * 0.25); c.lineTo(cx + q, cy); c.lineTo(cx + q * 0.25, cy + q * 0.25); c.lineTo(cx, cy + q); c.lineTo(cx - q * 0.25, cy + q * 0.25); c.lineTo(cx - q, cy); c.lineTo(cx - q * 0.25, cy - q * 0.25); c.closePath(); c.fill(); } }   // star glints in the eyes
   if (ex === 'hurt' && r > 9) { const ph = ((o.t || 0) * 0.8) % 1; c.fillStyle = `rgba(140,200,255,${0.95 * (1 - ph * 0.7)})`;   // teary: drops roll from both eyes
     for (const sx of [-es, es]) { c.beginPath(); c.ellipse(sx, ey + 0.16 * ez + ph * 0.3, 0.05 * ez, 0.075 * ez, 0, 0, TAU); c.fill(); } }
   if (o.sweat > 0 && r > 9) { const ph = ((o.t || 0) * 1.3) % 1; c.fillStyle = `rgba(150,215,255,${0.9 * (1 - ph)})`; c.save(); c.translate(es + 0.22 * ez, ey - 0.25 * ez + ph * 0.3); c.scale(0.07 * ez, 0.07 * ez);
@@ -1921,7 +1991,7 @@ function ringGeom(B, beat = 0) {   // countdown ring kept fully inside the visib
   return { x, y, R };
 }
 function drawDanger(c) {
-  const d = Math.min(1, dangerT / 2.2), near = bots.some(b => b.age > 0.6 && b.y - b.r < DANGER + 40);
+  const d = Math.min(1, dangerT / DANGER_T), near = bots.some(b => b.age > 0.6 && b.y - b.r < DANGER + 40);
   const beat = Math.pow(Math.max(0, Math.sin(time * (6 + d * 8))), 6);
   const al = 0.22 + (near ? 0.25 : 0) + d * (0.45 + 0.45 * beat);
   if (d > 0) {   // jar edges glow red
@@ -1936,7 +2006,7 @@ function drawDanger(c) {
   c.beginPath(); c.moveTo(JL + 2, DANGER); c.lineTo(JR - 2, DANGER); c.stroke(); c.restore();
   const B = state === 'over' ? overBot : dangerBot;
   if (B && (d > 0.02 || state === 'over')) {   // countdown ring on the offending bot (shrinks to nothing at game over)
-    const left = state === 'over' ? 0 : Math.max(0, 1 - dangerT / 2.2), rg = ringGeom(B, beat), R = rg.R;
+    const left = state === 'over' ? 0 : Math.max(0, 1 - dangerT / DANGER_T), rg = ringGeom(B, beat), R = rg.R;
     c.save(); c.lineCap = 'round'; c.strokeStyle = 'rgba(255,255,255,.15)'; c.lineWidth = 5; c.beginPath(); c.arc(rg.x, rg.y, R, 0, TAU); c.stroke();
     c.strokeStyle = '#ff4a5e'; c.shadowColor = '#ff2a40'; c.shadowBlur = 10; c.beginPath(); c.arc(rg.x, rg.y, R, -Math.PI / 2, -Math.PI / 2 + TAU * left); c.stroke(); c.restore();
   }
@@ -2022,7 +2092,7 @@ function render(dt) {
   drawInteraction(c);
   drawJarFront(c);
   if (dangerOver && state === 'playing' && dangerT > 0.05 && mode !== 'zen') {   // warning text on top of everything in the jar: whole seconds 3, 2, 1
-    const d = Math.min(1, dangerT / 2.2), n = Math.max(1, Math.ceil(2.2 - dangerT)), msg = (mode === 'flip' ? 'JAR FULL ' : 'OVERFLOW ') + n;
+    const d = Math.min(1, dangerT / DANGER_T), n = Math.max(1, Math.ceil(DANGER_T - dangerT)), msg = (mode === 'flip' ? 'JAR FULL ' : 'OVERFLOW ') + n;
     c.save(); c.font = '900 18px system-ui,sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 5; c.strokeStyle = 'rgba(0,0,0,.8)';
     const ty = mode === 'flip' ? ceilY + 52 : DANGER + 22; c.strokeText(msg, WW / 2, ty); c.fillStyle = `rgba(255,${110 - 40 * d},${120 - 40 * d},1)`; c.shadowColor = '#ff2a40'; c.shadowBlur = 10; c.fillText(msg, WW / 2, ty); c.restore();
   }
@@ -2087,7 +2157,7 @@ function drawLadder() {
 // ================================================================ bot interactions (cute, rare, small nudges)
 let inter = null, interT = 3, interOn = true, testHold = false;   // testHold: test hook, freezes the frame loop (state unchanged)
 const INTER_W = { smile: 2.2, wink: 1.1, slap: 2.0, highfive: 1.3, blush: 1.1 };   // slap ~27% (1 in ~3.7) for ordinary pairs; Trix pairs slap more
-function pickKind(A, B) { const w = Object.assign({}, INTER_W); if (A.t === 2 || B.t === 2) w.slap *= 1.6; if (TIERS[A.t].luna || TIERS[B.t].luna) w.slap *= 0.15; /* Luna almost never slaps */ let tot = 0; for (const k in w) tot += w[k]; let r = Math.random() * tot; for (const k in w) { r -= w[k]; if (r < 0) return k; } return 'smile'; }
+function pickKind(A, B) { const w = Object.assign({}, INTER_W); if (A.t === 2 || B.t === 2) w.slap *= 1.6; if (TIERS[A.t].luna || TIERS[B.t].luna) w.slap *= 0.15; /* Luna almost never slaps */ if (TIERS[A.t].nebula || TIERS[B.t].nebula) w.slap *= 0.3; /* Nebula rarely */ let tot = 0; for (const k in w) tot += w[k]; let r = Math.random() * tot; for (const k in w) { r -= w[k]; if (r < 0) return k; } return 'smile'; }
 // slaps: B gets angry (~2.5 s, glares at A); retaliates only ~28% of the time after a 0.5-0.9 s beat (bigger wind-up),
 // then the pair is on a 8-12 s slap cooldown. A retaliation never triggers another slap => at most 2 slaps per pair per cooldown.
 const SLAP_RET_P = 0.28, slapCD = new Map(); let pendingRet = null, slapLog = [];
@@ -2106,7 +2176,7 @@ function pickInteraction(force) {
   if (mode === 'zen' && !force && kind === 'slap') kind = Math.random() < 0.5 ? 'highfive' : 'blush';   // zen bots are nicer to each other
   if (kind === 'slap' && (B.t === 2 || (A.t !== 2 && Math.random() < 0.5))) [A, B] = [B, A];   // Trix loves to slap
   if (kind !== 'slap' && (A.anger > 0 || B.anger > 0)) return null;   // an angry bot isn't in the mood
-  const slow = kind === 'highfive' && (TIERS[A.t].luna || TIERS[B.t].luna) ? 1.7 : 1;   // Luna: slow, soft high-fives
+  const slow = kind === 'highfive' && (TIERS[A.t].luna || TIERS[B.t].luna) ? 1.7 : (TIERS[A.t].nebula || TIERS[B.t].nebula) ? 1.35 : 1;   // Luna: slow, soft high-fives
   return { A, B, kind, slow, t: 0, dur: (kind === 'slap' ? 1.6 : 1.5) * slow * (mode === 'zen' ? 1.35 : 1), hit: false };
 }
 function updateInteraction(dt) {
@@ -2128,6 +2198,7 @@ function updateInteraction(dt) {
   else if (I.kind === 'blush') { react(A, 'blushing', 0.3); react(B, 'blushing', 0.3); A.blush = B.blush = 1;
     if (!I.hit && I.t > 0.4) { I.hit = true; burst(mx, my - 20, '#ffb3c7', 6, 60, 2); sfx.aww(); } }
   else if (I.kind === 'highfive') { react(A, 'happy', 0.3); react(B, 'happy', 0.3);
+    if (!I.hit && I.t / (I.slow || 1) >= HF_IN && (TIERS[A.t].nebula || TIERS[B.t].nebula)) { const NM = hfGeom(A, B, HF_IN).M; stardust(NM.x, NM.y, 16, 90); }   // stardust trail
     if (!I.hit && I.t / (I.slow || 1) >= HF_IN) { I.hit = true; const hot = false, HM = hfGeom(A, B, HF_IN).M; burst(HM.x, HM.y, hot ? '#ff6a3d' : '#ffd23f', hot ? 20 : 12, hot ? 220 : 160, 2.2); sfx.clap(); } }
   else if (I.kind === 'slap') { const HIT = I.ret ? 0.85 : 0.5; react(A, I.ret ? 'annoyed' : I.t < HIT ? 'smirk' : 'smug', 0.3);
     if (!I.hit && I.t > HIT) { I.hit = true;
@@ -2137,9 +2208,9 @@ function updateInteraction(dt) {
       burst(px, py, '#ffffff', 8, 140, 2); ring(px, py, 10 * pw, '#ffffff', 0.3); floatText(px, py - 16, I.ret ? 'SLAP!' : 'slap!', I.ret ? 24 : 20, '#ffffff', 0.8).pop = true;
       slapLog.push({ a: A.id, b: B.id, t: time, ret: !!I.ret });
       if (I.ret) { react(B, 'shock', 1.4); B.anger = 0; slapCD.set(pairKey(A, B), time + 8 + Math.random() * 4); }
-      else { const hurt = TIERS[B.t].luna; B.anger = hurt ? 0 : 2.2 + Math.random() * 0.8; B.angryAt = A.id; B.pout = !hurt && Math.random() < 0.35; B.huff = hurt ? 0 : 0.3; if (hurt) react(B, 'hurt', 2.4);   // Luna: hurt + teary, never angry
+      else { const hurt = TIERS[B.t].luna, neb = TIERS[B.t].nebula; if (neb) { stardust(B.x, B.y, 18, 160); react(B, 'shock', 0.9); } B.anger = hurt || neb ? 0 : 2.2 + Math.random() * 0.8; B.angryAt = A.id; B.pout = !hurt && Math.random() < 0.35; B.huff = hurt || neb ? 0 : 0.3; if (hurt) react(B, 'hurt', 2.4);   // Luna: hurt + teary, never angry
         slapCD.set(pairKey(A, B), time + 8 + Math.random() * 4);
-        if (mode !== 'zen' && !hurt && Math.random() < SLAP_RET_P) { B.pout = false; I.dur = Math.min(I.dur, I.t + 0.35); pendingRet = { A: B, B: A, at: time + 0.5 + Math.random() * 0.4 }; } }   // beat measured from the hit
+        if (mode !== 'zen' && !hurt && Math.random() < SLAP_RET_P * (neb ? 0.25 : 1)) { B.pout = false; I.dur = Math.min(I.dur, I.t + 0.35); pendingRet = { A: B, B: A, at: time + 0.5 + Math.random() * 0.4 }; } }   // beat measured from the hit
       sfx.slap(); haptic('slap'); stat('slapGiven', A.t); stat('slapTaken', B.t); if (!I.ret) react(B, 'annoyed', 1.0); B.pop = 0.4 * pw; shake = Math.max(shake, 2 * pw);
       wake(B); B.vx += dx / d * 55 * pw; B.vy -= 45 * pw; B.w += (dx > 0 ? 1 : -1) * 0.8; }
     if (I.hit && !I.ret) react(B, 'annoyed', 0.4); }
@@ -2307,6 +2378,7 @@ const BIO = [
   'Cheeky cat-mouth :3  Six sides, zero worries, always up to something.',
   'Sleepy cloud. Would rather nap on top of the pile than be part of it.',
   'Shy flower. Blushes when looked at. Secretly the kindest bot in the jar.',
+  'Dreamy and mysterious cosmic cloud. Star-glint eyes, a knowing smile, the odd sparkly sigh. Stardust high-fives; rarely slaps, and poofs dust when startled.',
   'Sleepy, gentle moon. Half-lidded and humming, she gives slow, soft high-fives, almost never slaps, and goes teary instead of mad.',
   'Smug. Knows the answer before you ask. Two of them bend spacetime.',
 ];
@@ -2408,7 +2480,7 @@ function update(dt) {
   updateTilt(dt);
   flash = Math.max(0, flash - dt * 1.6);
   const dz = state === 'playing' && !finale ? danger01() : 0;
-  for (const b of bots) if (TIERS[b.t].luna) lunaTick(b, dt);
+  for (const b of bots) if (TIERS[b.t].luna) lunaTick(b, dt); else if (TIERS[b.t].nebula) nebulaTick(b, dt);
   for (const b of bots) {
     b.blink -= dt; if (b.blink < 0) { b.blinkT = 0.12; b.blink = 2 + Math.random() * 5; }
     if (b.blinkT > 0) b.blinkT -= dt; if (b.happy > 0) b.happy -= dt;
@@ -2475,6 +2547,8 @@ window.GrokDrop = {
   get finale() { return finale; }, get stats() { return JSON.parse(JSON.stringify(stats)); }, openCollection, closeCollection, get colOpen() { return colOpen; }, set hold(v) { testHold = !!v; last = performance.now(); acc = 0; }, enterEditor, exitEditor, get mode() { return mode; }, setMode, openModes, closeModes, get menuOpen() { return menuOpen; },
   get gravity() { return { gx, gy, dir: gdir, flipT, turning: turnT >= 0, nextDir, flips, hold: flipHold, ceil: ceilY }; }, flipIn(s) { flipT = s; }, fill: () => fillFrac(), get zenCleared() { return zenCleared; }, get padOn() { return padOn; }, get padPlaying() { return !!pad; }, setPad, get dangerT() { return dangerT; }, contactsDbg() { const o = []; for (let k = 0; k < ccount; k++) { const C = cpool[k]; const ca = Math.cos(C.a.a), sa = Math.sin(C.a.a); o.push({ a: C.a.id, b: C.b ? C.b.id : null, nx: +C.nx.toFixed(3), ny: +C.ny.toFixed(3), px: +(C.a.x + C.ax * ca - C.ay * sa).toFixed(2), py: +(C.a.y + C.ax * sa + C.ay * ca).toFixed(2), dep: +C.dep.toFixed(2), lam: +C.lam.toFixed(3) }); } return o; }, physStats, haptic, get vibe() { return vibeOn; }, set vibe(v) { setVibe(v); }, canVibe, get finEnd() { return finEnd; }, get interaction() { return inter; }, set interactions(v) { interOn = v; if (!v) inter = null; }, interact(kind) { inter = pickInteraction(kind); return !!inter; }, hfGeom, HF: { IN: HF_IN, HOLD: HF_HOLD, OUT: HF_OUT }, pickKind, slapDbg: { get log() { return slapLog; }, get pending() { return pendingRet; }, cd: slapCD, blocked: (a, b) => slapBlocked(a, b), tick(dt) { time += dt; updateInteraction(dt); } }, get time() { return time; },
   shake: doShake, get shakeCharges() { return shakeCharges; }, set shakeCharges(v) { shakeCharges = v; updateShakeUI(); }, get shakeT() { return shakeT; }, get shakeCalm() { return shakeCalm; }, get shakeCD() { return shakeCD; }, catchWish: (cx = 100, cy = 100) => catchWish({ life: 0, max: 1 }, cx, cy),
+  simTick(dt = 1 / 60) { if (state === 'over' || state === 'paused') return; const n = Math.round(dt / STEP); for (let i = 0; i < n && state !== 'over'; i++) step(STEP); update(dt); },   // headless fast-forward (tests / score sims)
+  migrateStats, radiiFor, get runBest() { return runBest; },
   get escapes() { return escapes; }, get runId() { return runId; }, get dangerOver() { return dangerOver; }, hitMeteor, ringGeom, visWorld, layoutFits, get layoutPending() { return layoutPending(); },
   restart, pause: setPaused, shareText, closeness, get overT() { return overT; }, get overBot() { return overBot; }, get dangerBot() { return dangerBot; }, get runMerges() { return runMerges; }, TIERS, get world() { return { wide, WW, WH, JL, JR, JT, JB, DANGER, DROP_Y, layOff }; },
 };
