@@ -1795,7 +1795,9 @@ function drawBot(c, t, x, y, r, o = {}) {
     const exx = side * es + llx * 0.09 + (T.grok ? 0.06 : 0), eyy = ey + lly * 0.07 - (T.grok ? 0.04 : 0);
     c.save(); c.translate(exx, eyy);
     if (T.grok) c.rotate(0.38);
-    if (winking || (happy && ex === 'squint')) { // > < squint / wink line
+    if (o.sleep) { // fully closed, curved sleeping lids
+      c.lineWidth = ew * 0.7; c.lineCap = 'round'; c.beginPath(); c.moveTo(-ew * 1.15, -0.01); c.quadraticCurveTo(0, 0.13, ew * 1.15, -0.01); c.stroke();
+    } else if (winking || (happy && ex === 'squint')) { // > < squint / wink line
       c.lineWidth = ew * 0.8; c.lineCap = 'round'; c.beginPath(); c.moveTo(-ew * 1.0, side * 0 - 0.02); c.lineTo(ew * 1.0, 0.02); c.stroke();
     } else if (happy) { // ^ ^ squint
       c.lineWidth = ew * 0.85; c.lineCap = 'round'; c.beginPath(); c.moveTo(-ew * 1.1, 0.05); c.quadraticCurveTo(0, -0.17, ew * 1.1, 0.05); c.stroke();
@@ -2568,7 +2570,7 @@ function sigPose(i, k, r) {
     case 4: P.expr = 'blushing'; P.blush = 1; P.sx = 1 + 0.05 * Math.sin(k * 11); P.sy = 1 - 0.04 * Math.sin(k * 11); P.a = Math.sin(k * 3.2) * 0.14; break;   // deep blush, swaying
     case 5: P.expr = 'smile'; P.a = Math.sin(k * 9) * 0.07 * (1 - sClamp(k, 0.2, 1.6)); P.dy = -Math.sin(sClamp(k, 0.05, 0.35) * Math.PI) * r * 0.16; break;   // nya + ears pop
     case 6: { P.a = Math.sin(k * 2.5) * 0.06;   // dozes off -> turns stormy and rains in her sleep -> wakes with a start, sheepish
-      if (k < 0.35) P.expr = 'yawn'; else if (k < 1.75) { P.expr = null; P.blink = true; P.sy = 1 + 0.03 * Math.sin(k * 6); P.tint = ['#3b4256', 0.62 * sEase(sClamp(k, 0.6, 1.0))]; if (k > 1.25 && k < 1.6) P.dx = Math.sin(k * 60) * r * 0.012; }
+      if (k < 0.35) P.expr = 'yawn'; else if (k < 1.75) { P.expr = null; P.blink = true; P.sleep = true; P.sy = 1 + 0.03 * Math.sin(k * 6); P.tint = ['#3b4256', 0.62 * sEase(sClamp(k, 0.6, 1.0))]; if (k > 1.25 && k < 1.6) P.dx = Math.sin(k * 60) * r * 0.012; }
       else if (k < 1.97) { P.expr = 'shock'; P.dy = -Math.sin(sClamp(k, 1.75, 1.92) * Math.PI) * r * 0.22; P.tint = ['#3b4256', 0.62 * (1 - sEase(sClamp(k, 1.75, 1.97)))]; P.a = 0; }
       else { P.expr = 'nervous'; P.blush = 1; P.lx = -0.7; P.ly = 0.3; P.a = Math.sin(k * 5) * 0.03; } break; }
     case 7: { if (k < 0.55) { const q = sClamp(k, 0, 0.55); P.sy = 1 + 0.12 * q; P.sx = 1 - 0.06 * q; P.a = -0.15 * q + Math.sin(k * 30) * 0.02 * q; P.expr = 'nervous'; P.ly = -0.6; }   // ah... ah... ACHOO -> pollen -> dancing flower field
@@ -2593,6 +2595,13 @@ function sigPose(i, k, r) {
 }
 function sTxt(c, str, x, y, size, col, al) { c.globalAlpha = al; c.fillStyle = col; c.font = `900 ${Math.round(size)}px system-ui,sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(str, x, y); c.globalAlpha = 1; }
 function sHeart(c, x, y, s, col, al) { c.globalAlpha = al; c.fillStyle = col; c.beginPath(); c.moveTo(x, y + s * 0.35); c.bezierCurveTo(x - s * 1.1, y - s * 0.4, x - s * 0.45, y - s * 1.1, x, y - s * 0.45); c.bezierCurveTo(x + s * 0.45, y - s * 1.1, x + s * 1.1, y - s * 0.4, x, y + s * 0.35); c.fill(); c.globalAlpha = 1; }
+function grokCrownSeat(T, x, y, R, a, sx, sy) {   // top-most point of the drawn (= collider) outline in world space, plus the local surface slope there
+  const ca = Math.cos(a), sa = Math.sin(a), pts = T.pts.map(([px, py]) => [x + sx * (px * ca - py * sa) * R, y + sy * (px * sa + py * ca) * R]), n = pts.length;
+  let bi = 0; for (let i = 1; i < n; i++) if (pts[i][1] < pts[bi][1]) bi = i;
+  const span = Math.max(2, Math.round(n * 0.05)), p0 = pts[(bi - span + n) % n], p1 = pts[(bi + span) % n];
+  let ang = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]); if (Math.cos(ang) < 0) ang += Math.PI; if (ang > Math.PI) ang -= TAU;
+  return { x: pts[bi][0], y: pts[bi][1], ang };
+}
 function sigFx(c, i, cx, cy, r, k, P, front) {   // front=false: behind the bot, true: over it
   const T = TIERS[i], bx = cx + P.dx, by = cy + P.dy;
   if (!front) {
@@ -2682,7 +2691,8 @@ function sigFx(c, i, cx, cy, r, k, P, front) {   // front=false: behind the bot,
       const sw = sClamp(k, 1.3, 1.85); if (sw > 0 && sw < 1) { c.globalAlpha = 1 - sw; c.strokeStyle = '#bff3ff'; c.lineWidth = r * 0.1 * (1 - sw) + 1;   // flat ground shockwave (not a ring around her like Nebula's)
         c.beginPath(); c.ellipse(cx, cy + r * 1.0, r * (0.6 + sw * 2.2), r * (0.12 + sw * 0.25), 0, 0, TAU); c.stroke(); }
       const cr = sEase(sClamp(k, 1.45, 1.95)), cf = 1 - sClamp(k, 2.45, 2.6); if (cr > 0 && cf > 0) {   // crown of light descends and settles
-        const hx = bx, hy = by - r * 0.92 - (1 - cr) * r * 1.4, w = r * 0.62, h = r * 0.42; c.globalAlpha = cf * Math.min(1, cr * 2); c.save(); c.translate(hx, hy); c.rotate(P.a);
+        const st = grokCrownSeat(T, bx, by, r * (P.scale == null ? 1 : P.scale), P.a, P.sx / (P.br || 1), P.sy / (P.br || 1)), w = r * 0.5, h = r * 0.4, lift = (1 - cr) * r * 1.4;   // seat on the real top contour, tilted to its slope
+        const hx = st.x + Math.sin(st.ang) * (lift + h * 0.3 - r * 0.03), hy = st.y - Math.cos(st.ang) * (lift + h * 0.3 - r * 0.03); c.globalAlpha = cf * Math.min(1, cr * 2); c.save(); c.translate(hx, hy); c.rotate(st.ang);
         c.shadowColor = '#ffe9a0'; c.shadowBlur = r * 0.3; const g = c.createLinearGradient(0, -h, 0, h * 0.3); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#ffd34d'); c.fillStyle = g;
         c.beginPath(); c.moveTo(-w, h * 0.3); c.lineTo(-w, -h * 0.35); c.lineTo(-w * 0.5, h * -0.05); c.lineTo(0, -h); c.lineTo(w * 0.5, h * -0.05); c.lineTo(w, -h * 0.35); c.lineTo(w, h * 0.3); c.closePath(); c.fill(); c.shadowBlur = 0;
         c.fillStyle = '#7fe0ff'; for (const [x, y] of [[-w, -h * 0.35], [0, -h], [w, -h * 0.35]]) { c.beginPath(); c.arc(x, y, r * 0.06, 0, TAU); c.fill(); } c.restore();
@@ -2714,11 +2724,11 @@ function drawSigFrame(c, i, W, H, seen, R, tt) {
   const wob = R && R.kind === 'wobble' ? Math.sin(k * 38) * W * 0.014 * (1 - k / 1.0) : 0;
   const bob = Math.sin(tt * 2 + i) * W * 0.012;
   const r = W * 0.24, cx = W / 2 + wob, cy = H * 0.5 + bob, breathe = 1 + Math.sin(tt * 2.4 + i * 0.7) * 0.025;
-  const P = sig ? sigPose(i, k, r) : null;
+  const P = sig ? sigPose(i, k, r) : null; if (P) P.br = breathe;
   if (sig) sigFx(c, i, cx, cy, r, k, P, false);
   let dc = c, tc = null; if (P && P.tint && P.tint[1] > 0.01) { tc = document.createElement('canvas'); tc.width = W; tc.height = H; dc = tc.getContext('2d'); }
   if (!(P && P.hide)) drawBot(dc, i, cx + (P ? P.dx : 0), cy + (P ? P.dy : 0), r * (P && P.scale != null ? P.scale : 1), { a: P ? P.a : (R ? Math.sin(k * 30) * 0.12 * (1 - k) : Math.sin(tt * 1.3 + i) * 0.03), sx: (P ? P.sx : 1) / breathe, sy: (P ? P.sy : 1) * breathe,
-    lx: P && P.lx != null ? P.lx : Math.sin(tt * 0.7 + i) * 0.4, ly: P && P.ly != null ? P.ly : 0.15, blink: P && P.blink != null ? P.blink : blinkAt(tt * 0.8, i * 1.37),
+    lx: P && P.lx != null ? P.lx : Math.sin(tt * 0.7 + i) * 0.4, ly: P && P.ly != null ? P.ly : 0.15, blink: P && P.blink != null ? P.blink : blinkAt(tt * 0.8, i * 1.37), sleep: !!(P && P.sleep),
     expr: !seen ? null : P ? P.expr : null, blush: P ? P.blush : 0, t: tt + (P ? P.tAdd : 0), glint: P ? P.glint : 0 });
   if (tc) { dc.globalCompositeOperation = 'source-atop'; dc.globalAlpha = P.tint[1]; dc.fillStyle = P.tint[0]; dc.fillRect(0, 0, W, H); c.drawImage(tc, 0, 0); }   // stormy tint on the bot only
   if (!seen) { c.globalCompositeOperation = 'source-atop'; c.fillStyle = '#0b0b14'; c.fillRect(0, 0, W, H); c.globalCompositeOperation = 'source-over';
