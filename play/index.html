@@ -2550,8 +2550,8 @@ function buildCollection() {
 function sizeCollection() { const dpr = Math.min(devicePixelRatio || 1, 2); for (const c of colCards) { const w = c.cv.clientWidth || 160; c.cv.width = Math.round(w * dpr); c.cv.height = Math.round(w * dpr); c.dpr = dpr; } }
 
 // ---------------------------------------------------------------- trophy-room SIGNATURE MOVES: one unique move per bot (pose + canvas fx + sound)
-const SIG_IDS = ['blip-peek', 'pilly-toss', 'trix-slap', 'cubo-tip', 'harry-hearts', 'hexa-nya', 'nimbus-drizzle', 'bloom-garden', 'nebula-starbirth', 'luna-lowgrav', 'grok-shades'];
-const SIG_DUR = 1.8;
+const SIG_IDS = ['blip-peek', 'pilly-toss', 'trix-slap', 'cubo-tip', 'harry-hearts', 'hexa-nya', 'nimbus-drizzle', 'bloom-sneeze', 'nebula-split', 'luna-alarm', 'grok-shades'];
+const SIG_DUR = 1.8, SIG_DURS = [1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 2.2, 2.2, 2.4, 2.8];   // per-bot move length
 const sClamp = (k, a, b) => Math.max(0, Math.min(1, (k - a) / (b - a))), sEase = x => x * x * (3 - 2 * x);
 function sigPose(i, k, r) {
   const P = { dx: 0, dy: 0, a: 0, sx: 1, sy: 1, expr: 'happy', blush: 0, tAdd: 0, glint: 0, lx: null, ly: null, blink: null };
@@ -2568,14 +2568,22 @@ function sigPose(i, k, r) {
     case 4: P.expr = 'blushing'; P.blush = 1; P.sx = 1 + 0.05 * Math.sin(k * 11); P.sy = 1 - 0.04 * Math.sin(k * 11); P.a = Math.sin(k * 3.2) * 0.14; break;   // deep blush, swaying
     case 5: P.expr = 'smile'; P.a = Math.sin(k * 9) * 0.07 * (1 - sClamp(k, 0.2, 1.6)); P.dy = -Math.sin(sClamp(k, 0.05, 0.35) * Math.PI) * r * 0.16; break;   // nya + ears pop
     case 6: P.expr = k < 0.95 ? 'yawn' : null; P.sy = k < 0.95 ? 1 + 0.12 * Math.sin(sClamp(k, 0, 0.95) * Math.PI) : 1; P.sx = 2 - P.sy; P.a = Math.sin(k * 1.4) * 0.05; break;   // big yawn, drowsy
-    case 7: { const tw = sEase(sClamp(k, 0.05, 0.75)); P.a = tw * TAU * 1.5; P.sx = 1 + 0.12 * Math.sin(tw * Math.PI); P.sy = 1 - 0.08 * Math.sin(tw * Math.PI); P.dy = -Math.sin(tw * Math.PI) * r * 0.2;   // twirl -> garden -> petal shower
-      P.expr = k < 0.75 ? 'cheer' : 'blushing'; P.blush = k > 0.75 ? 1 : 0.4; P.ly = k > 1.0 ? -0.6 : null; break; }
-    case 8: { const ex = Math.sin(sClamp(k, 0.0, 1.3) * Math.PI); P.sx = P.sy = 1 + 0.18 * ex; P.tAdd = k * k * 22; P.a = sEase(sClamp(k, 0, 1.3)) * 1.6; P.glint = 1;   // galaxy swells, births a star
-      P.expr = k < 0.6 ? 'smile' : k < 1.25 ? 'shock' : 'cheer'; P.ly = k > 0.55 && k < 1.3 ? -0.9 : null; P.lx = k > 0.55 && k < 1.3 ? 0 : null; break; }
-    case 9: { const fl = k < 0.25 ? 0 : k < 1.45 ? Math.sin(sClamp(k, 0.25, 1.45) * Math.PI) : 0;   // low-gravity float: slow rise + drift down
-      P.dy = -fl * r * 0.8 + (k > 1.45 && k < 1.6 ? Math.sin(sClamp(k, 1.45, 1.6) * Math.PI) * r * 0.05 : 0) + (k < 0.25 ? Math.sin(sClamp(k, 0, 0.25) * Math.PI) * r * 0.06 : 0); P.dx = Math.sin(k * 2.2) * r * 0.15 * fl; P.a = Math.sin(k * 1.7) * 0.25 * fl;
-      P.expr = fl > 0.3 ? 'cheer' : null; P.glint = 1.2 * fl; P.ly = -0.3; break; }
-    case 10: P.expr = 'smug'; P.dy = k > 0.38 && k < 0.5 ? Math.sin(sClamp(k, 0.38, 0.5) * Math.PI) * r * 0.04 : 0; P.lx = 0.5; P.ly = -0.2; break;   // shades drop, smug
+    case 7: { if (k < 0.55) { const q = sClamp(k, 0, 0.55); P.sy = 1 + 0.12 * q; P.sx = 1 - 0.06 * q; P.a = -0.15 * q + Math.sin(k * 30) * 0.02 * q; P.expr = 'nervous'; P.ly = -0.6; }   // ah... ah... ACHOO -> pollen -> dancing flower field
+      else if (k < 0.85) { const w = Math.sin(sClamp(k, 0.55, 0.85) * Math.PI); P.dx = w * r * 0.16; P.a = -0.15 + 0.5 * w; P.sx = 1 + 0.16 * w; P.sy = 1 - 0.13 * w; P.expr = 'shock'; }
+      else { P.expr = 'blushing'; P.blush = 1; P.lx = 0.7; P.ly = 0.7; P.a = Math.sin(k * 9) * 0.07 * sClamp(k, 1.1, 1.3); } break; }
+    case 8: { if (k < 0.3) { P.sx = 1 + 0.1 * Math.sin(k * 45); P.sy = 1 - 0.1 * Math.sin(k * 45); P.expr = 'shock'; }   // splits into three mini clouds that orbit and recombine with a BOOM
+      else if (k < 1.45) P.hide = true;
+      else { P.scale = 1.28 - 0.28 * sEase(sClamp(k, 1.45, 1.75)); P.expr = 'cheer'; P.glint = 2 * (1 - sClamp(k, 1.5, 2.1)); } break; }
+    case 9: { if (k < 0.3) { P.blink = true; P.expr = null; P.sy = 1 + 0.025 * Math.sin(k * 7); }   // asleep -> alarm-clock star -> grumble -> cloud blanket -> snore
+      else if (k < 0.72) { P.expr = 'shock'; P.dy = -Math.sin(sClamp(k, 0.3, 0.45) * Math.PI) * r * 0.16; P.dx = Math.sin(k * 70) * r * 0.02; P.lx = 0.8; P.ly = -0.7; }
+      else if (k < 1.12) { P.expr = 'annoyed'; P.a = Math.sin(k * 22) * 0.04; P.lx = 0.8; P.ly = -0.5; }
+      else { P.blink = true; P.expr = null; P.dy = r * 0.04; P.sy = 1 + 0.03 * Math.sin(k * 6); } break; }
+    case 10: { P.expr = 'smug'; P.lx = 0.5; P.ly = -0.2;   // shades on -> black hole opens -> spirals in, gone -> hole flips -> pops back out, shades still on, smug
+      if (k > 0.38 && k < 0.5) P.dy = Math.sin(sClamp(k, 0.38, 0.5) * Math.PI) * r * 0.04;
+      if (k >= 0.5 && k < 1.12) { const q = sEase(sClamp(k, 0.5, 1.12)); P.scale = Math.max(0.001, 1 - q); P.a = q * TAU * 2.5; P.dx = Math.cos(q * 10) * r * 0.5 * (1 - q); P.dy = Math.sin(q * 10) * r * 0.22 * (1 - q); P.expr = 'shock'; }
+      else if (k >= 1.12 && k < 2.05) P.hide = true;
+      else if (k >= 2.05 && k < 2.42) { const s2 = sClamp(k, 2.05, 2.42); P.scale = s2 < 0.6 ? sEase(s2 / 0.6) * 1.18 : 1.18 - 0.18 * sEase((s2 - 0.6) / 0.4); P.dy = -Math.sin(s2 * Math.PI) * r * 0.35; P.a = (1 - s2) * -1.4; P.expr = 'cheer'; }
+      break; }
   }
   return P;
 }
@@ -2584,18 +2592,20 @@ function sHeart(c, x, y, s, col, al) { c.globalAlpha = al; c.fillStyle = col; c.
 function sigFx(c, i, cx, cy, r, k, P, front) {   // front=false: behind the bot, true: over it
   const T = TIERS[i], bx = cx + P.dx, by = cy + P.dy;
   if (!front) {
-    if (i === 10) { const hx = cx - r * 1.15, hy = cy + r * 0.62, hr = r * 0.32 * sClamp(k, 0.55, 0.8) * (1 - sClamp(k, 1.55, 1.8));   // mini black hole
-      if (hr > 0.5) { c.fillStyle = '#000'; c.beginPath(); c.arc(hx, hy, hr, 0, TAU); c.fill(); c.lineWidth = Math.max(1, hr * 0.18);
-        for (let j = 0; j < 3; j++) { c.strokeStyle = ['#ff9a3c', '#b06bff', '#ffd27a'][j]; c.globalAlpha = 0.85; c.beginPath(); c.ellipse(hx, hy, hr * (1.3 + j * 0.25), hr * (0.45 + j * 0.08), -0.3, k * 9 + j * 2, k * 9 + j * 2 + 2.6); c.stroke(); } c.globalAlpha = 1; } }
-    if (i === 8) { const g = Math.sin(sClamp(k, 0.0, 1.5) * Math.PI); if (g > 0.01) for (let arm = 0; arm < 2; arm++) for (let j = 0; j < 26; j++) {   // galaxy: two spiral arms around her
-        const q = j / 26, ang = arm * Math.PI + q * 4.2 + k * 2.4, rr = r * (0.75 + q * 1.0) * (0.6 + 0.4 * g);
-        c.globalAlpha = Math.min(1, g * (1 - q * 0.8)); c.fillStyle = ['#ff9de6', '#b98cff', '#7fa8ff', '#ffffff'][(j + arm) % 4];
-        c.beginPath(); c.ellipse(cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr * 0.55, r * 0.075 * (1 - q * 0.5), r * 0.045, ang, 0, TAU); c.fill(); } }
-    if (i === 9) { const e = sClamp(k, 0.3, 1.1) * (1 - sClamp(k, 1.55, 1.8)); if (e > 0) {   // a tiny Earth rising behind her
-        const ex = cx - r * 1.05, ey = cy + r * 0.9 - e * r * 0.95, er = r * 0.26; c.globalAlpha = e;
-        const eg = c.createRadialGradient(ex - er * 0.3, ey - er * 0.3, er * 0.1, ex, ey, er); eg.addColorStop(0, '#7fd0ff'); eg.addColorStop(1, '#1d5fbf'); c.fillStyle = eg; c.beginPath(); c.arc(ex, ey, er, 0, TAU); c.fill();
-        c.fillStyle = '#4fbf6a'; c.beginPath(); c.ellipse(ex - er * 0.2, ey - er * 0.1, er * 0.4, er * 0.25, 0.6, 0, TAU); c.fill(); c.beginPath(); c.ellipse(ex + er * 0.35, ey + er * 0.35, er * 0.25, er * 0.15, -0.4, 0, TAU); c.fill();
-        c.strokeStyle = 'rgba(150,210,255,.5)'; c.lineWidth = er * 0.15; c.beginPath(); c.arc(ex, ey, er * 1.08, 0, TAU); c.stroke(); } }
+    if (i === 10) { const hx = cx, hy = cy + r * 0.05, open = sEase(sClamp(k, 0.15, 0.5)), close = sEase(sClamp(k, 2.05, 2.35)), hr = r * 0.95 * open * (1 - close);   // the black hole (white hole after the flip)
+      if (hr > 0.5) { const flip = k >= 1.95, dir = flip ? -1 : 1, fl = sClamp(k, 1.9, 2.05) * (1 - sClamp(k, 2.1, 2.3));
+        if (k > 1.0 && k < 2.1) { c.strokeStyle = 'rgba(170,140,255,.35)'; c.lineWidth = 1.2; const wv = sClamp(k, 1.0, 1.3);   // warped space: grid lines bending into the hole
+          for (let j = -3; j <= 3; j++) { const off = j * r * 0.42; c.beginPath(); for (let t = -1.6; t <= 1.6; t += 0.1) { const x = hx + t * r, d = Math.hypot(t * r, off) / r, pull = wv * r * 0.5 / (1 + d * d * 1.5); c.lineTo(x, hy + off - Math.sign(off || 1) * pull); } c.stroke();
+            c.beginPath(); for (let t = -1.6; t <= 1.6; t += 0.1) { const y = hy + t * r, d = Math.hypot(off, t * r) / r, pull = wv * r * 0.5 / (1 + d * d * 1.5); c.lineTo(hx + off - Math.sign(off || 1) * pull, y); } c.stroke(); } }
+        const g = c.createRadialGradient(hx, hy, 0, hx, hy, hr * 1.25);
+        if (!flip) { g.addColorStop(0, '#000'); g.addColorStop(0.62, '#000'); g.addColorStop(0.8, 'rgba(120,60,200,.6)'); g.addColorStop(1, 'rgba(60,20,120,0)'); }
+        else { g.addColorStop(0, '#ffffff'); g.addColorStop(0.55, 'rgba(230,240,255,.95)'); g.addColorStop(0.85, 'rgba(160,200,255,.5)'); g.addColorStop(1, 'rgba(160,200,255,0)'); }
+        c.fillStyle = g; c.beginPath(); c.arc(hx, hy, hr * 1.25, 0, TAU); c.fill();
+        c.lineWidth = Math.max(1.5, hr * 0.07);
+        for (let j = 0; j < 4; j++) { c.strokeStyle = (flip ? ['#9fd3ff', '#ffffff', '#c9b8ff', '#ffe9a8'] : ['#ff9a3c', '#b06bff', '#ffd27a', '#ff5fa2'])[j]; c.globalAlpha = 0.85;
+          const st = dir * k * (7 + j * 2) + j * 1.6; c.beginPath(); c.ellipse(hx, hy, hr * (0.8 + j * 0.13), hr * (0.3 + j * 0.05), -0.25, st, st + 2.4); c.stroke(); }
+        if (fl > 0) { c.globalAlpha = fl; c.fillStyle = '#ffffff'; c.beginPath(); c.arc(hx, hy, r * 1.6 * fl, 0, TAU); c.fill(); }
+        c.globalAlpha = 1; } }
     c.globalAlpha = 1; return;
   }
   switch (i) {
@@ -2623,38 +2633,54 @@ function sigFx(c, i, cx, cy, r, k, P, front) {   // front=false: behind the bot,
       c.globalAlpha = a; c.fillStyle = '#c9d2e3'; for (const [ox, oy, rr] of [[-0.3, 0.05, 0.22], [0, -0.08, 0.28], [0.3, 0.04, 0.2]]) { c.beginPath(); c.arc(ccx + ox * r, ccy + oy * r, rr * r, 0, TAU); c.fill(); }
       c.strokeStyle = '#7fb6ff'; c.lineWidth = Math.max(1, r * 0.03); for (let j = 0; j < 5; j++) { const ph = (k * 2.5 + j * 0.37) % 1, x = ccx + (j - 2) * r * 0.14; c.beginPath(); c.moveTo(x, ccy + r * 0.2 + ph * r * 0.5); c.lineTo(x - r * 0.03, ccy + r * 0.3 + ph * r * 0.5); c.stroke(); }
       sTxt(c, 'z', cx - r * 0.9, cy - r * 0.9 - (k - 0.9) * r * 0.3, r * 0.22, '#ffffff', a * 0.8); sTxt(c, 'z', cx - r * 1.15, cy - r * 1.2 - (k - 0.9) * r * 0.3, r * 0.3, '#ffffff', a * 0.6); c.globalAlpha = 1; break; }
-    case 7: { const by0 = cy + r * 0.95, gr = sEase(sClamp(k, 0.35, 1.0)), fade = 1 - sClamp(k, 1.55, 1.8);   // vines + flowers sprout around her, then a petal shower
-      if (gr > 0 && fade > 0) { c.globalAlpha = fade; c.strokeStyle = '#2bb673'; c.lineWidth = Math.max(1.5, r * 0.06); c.lineCap = 'round';
-        const V = [[-1.35, -0.5, -1.0], [1.35, -0.6, 1.0], [-1.0, -1.2, -0.4], [1.0, -1.25, 0.5], [-0.3, -1.45, -0.2], [0.35, -1.4, 0.3]];
-        V.forEach(([vx, vy, cv], j) => { const g = sClamp(gr, j * 0.08, 1); if (g <= 0) return; const ex = cx + vx * r * g, ey = by0 + (vy * r - r * 0.1) * g;
-          c.beginPath(); c.moveTo(cx + vx * r * 0.2, by0); c.quadraticCurveTo(cx + (vx + cv) * r * 0.55 * g, by0 + vy * r * 0.4 * g, ex, ey); c.stroke();
-          const fr = r * 0.16 * sEase(sClamp(g, 0.6, 1)); if (fr > 0.5) { const col = ['#ff7eb6', '#ffd23f', '#b48cff', '#ff9a5c', '#7ee8ff', '#ff5fa2'][j];
-            for (let pp = 0; pp < 5; pp++) { const an = pp / 5 * TAU + k * 2; c.fillStyle = col; c.beginPath(); c.arc(ex + Math.cos(an) * fr * 0.6, ey + Math.sin(an) * fr * 0.6, fr * 0.5, 0, TAU); c.fill(); }
-            c.fillStyle = '#fff6c2'; c.beginPath(); c.arc(ex, ey, fr * 0.35, 0, TAU); c.fill(); } }); }
-      if (k > 0.95) for (let j = 0; j < 14; j++) { const q = sClamp(k, 0.95 + (j % 7) * 0.05, 1.8); if (q <= 0 || q >= 1) continue;
-        c.globalAlpha = 1 - q; c.fillStyle = j % 3 ? '#ffb3d9' : '#9ff7da'; c.save(); c.translate(cx + ((j * 37) % 100 / 100 - 0.5) * r * 2.6 + Math.sin(q * 8 + j) * r * 0.12, cy - r * 1.5 + q * r * 2.4); c.rotate(q * 7 + j);
-        c.beginPath(); c.ellipse(0, 0, r * 0.06, r * 0.11, 0, 0, TAU); c.fill(); c.restore(); }
+    case 7: { if (k > 0.1 && k < 0.55) sTxt(c, k < 0.32 ? 'ah…' : 'ah… ah…', bx + r * 0.2, by - r * 1.25, r * 0.26, '#eafff6', sClamp(k, 0.1, 0.18));
+      const sn = sClamp(k, 0.55, 0.6) * (1 - sClamp(k, 0.95, 1.15)); if (sn > 0) sTxt(c, 'ACHOO!', cx + r * 0.9, cy - r * 1.2, r * 0.36, '#fff27a', sn);
+      if (k > 0.55 && k < 1.2) { const bl = sEase(sClamp(k, 0.55, 0.9)), dn = sClamp(k, 0.85, 1.15), pcx = cx + r * (0.55 + bl * 0.55), pcy = cy - r * 0.15 + dn * dn * r * 0.9;   // puffy pollen cloud blasts out, drifts down
+        const pg = c.createRadialGradient(pcx, pcy, 0, pcx, pcy, r * (0.35 + bl * 0.5)); pg.addColorStop(0, `rgba(255,230,90,${0.6 * (1 - dn)})`); pg.addColorStop(1, 'rgba(255,230,90,0)'); c.fillStyle = pg; c.beginPath(); c.arc(pcx, pcy, r * (0.35 + bl * 0.5), 0, TAU); c.fill();
+        for (let j = 0; j < 34; j++) { const rj = ((j * 73) % 100) / 100, rk = ((j * 37 + 11) % 100) / 100, an = (rk - 0.5) * TAU, d = r * (0.1 + bl * (0.25 + rj * 0.5));
+          c.globalAlpha = (1 - dn * 0.85); c.fillStyle = j % 3 ? '#ffe14d' : '#fff6b0'; c.beginPath(); c.arc(pcx + Math.cos(an) * d, pcy + Math.sin(an) * d * 0.75 + dn * rj * r * 0.4, r * (0.045 + rk * 0.045) * (0.6 + bl * 0.6), 0, TAU); c.fill(); } }
+      const ff = 1 - sClamp(k, 2.0, 2.2);   // a field of tiny dancing flowers springs up along the pedestal
+      if (k > 1.0 && ff > 0) for (let j = 0; j < 9; j++) { const g = sEase(sClamp(k, 1.0 + j * 0.035, 1.22 + j * 0.035)); if (g <= 0) continue;
+        const fx = cx + (j - 4) * r * 0.27, fy = cy + r * 1.0, h = r * (0.36 + 0.12 * (j % 3)) * g, sw = Math.sin(k * 12 + j * 1.3) * 0.4, hop = Math.abs(Math.sin(k * 12 + j)) * r * 0.04;
+        const hx = fx + Math.sin(sw) * h, hy = fy - Math.cos(sw) * h - hop; c.globalAlpha = ff;
+        c.strokeStyle = '#33c47a'; c.lineWidth = Math.max(1.2, r * 0.035); c.beginPath(); c.moveTo(fx, fy); c.quadraticCurveTo(fx, fy - h * 0.5, hx, hy); c.stroke();
+        const col = ['#ff7eb6', '#ffd23f', '#b48cff', '#ff9a5c', '#7ee8ff'][j % 5], pr = r * 0.1 * g;
+        for (let pp = 0; pp < 5; pp++) { const an = pp / 5 * TAU + sw; c.fillStyle = col; c.beginPath(); c.arc(hx + Math.cos(an) * pr, hy + Math.sin(an) * pr, pr * 0.75, 0, TAU); c.fill(); }
+        c.fillStyle = '#fff6c2'; c.beginPath(); c.arc(hx, hy, pr * 0.7, 0, TAU); c.fill(); c.fillStyle = '#3a2a1a'; c.fillRect(hx - pr * 0.35, hy - pr * 0.15, pr * 0.15, pr * 0.2); c.fillRect(hx + pr * 0.2, hy - pr * 0.15, pr * 0.15, pr * 0.2); }
       c.globalAlpha = 1; break; }
-    case 8: { const sx0 = cx, sy0 = cy - r * 1.35, born = sClamp(k, 0.55, 0.85), pop = sClamp(k, 1.25, 1.8);   // a tiny star is born, twinkles, pops into confetti stardust
-      if (born > 0 && pop <= 0) { const tw = 0.75 + 0.25 * Math.sin(k * 30), q = r * 0.3 * sEase(born) * tw; c.fillStyle = '#fffbe0'; c.shadowColor = '#ffe9a8'; c.shadowBlur = r * 0.3;
-        c.beginPath(); for (let j = 0; j < 8; j++) { const an = j / 8 * TAU - Math.PI / 2, d = j % 2 ? q * 0.3 : q; c.lineTo(sx0 + Math.cos(an) * d, sy0 + Math.sin(an) * d); } c.closePath(); c.fill(); c.shadowBlur = 0;
-        if (k < 0.9) { c.strokeStyle = 'rgba(255,220,255,.6)'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(cx, cy - r * 0.9); c.lineTo(sx0, sy0 + q); c.stroke(); } }
-      if (pop > 0) for (let j = 0; j < 22; j++) { const an = j / 22 * TAU + j * 0.3, d = r * (0.2 + sEase(pop) * (0.9 + (j % 4) * 0.2)), g = pop * pop * r * 0.5;
-        c.globalAlpha = 1 - pop; c.fillStyle = ['#ff9de6', '#ffd23f', '#7fe0ff', '#b98cff', '#ffffff', '#8affc1'][j % 6]; c.save(); c.translate(sx0 + Math.cos(an) * d, sy0 + Math.sin(an) * d + g); c.rotate(pop * 9 + j);
-        if (j % 3) c.fillRect(-r * 0.04, -r * 0.02, r * 0.08, r * 0.04); else { c.beginPath(); c.arc(0, 0, r * 0.03, 0, TAU); c.fill(); } c.restore(); }
-      c.globalAlpha = 1; break; }
-    case 9: { const lift = sClamp(k, 0.15, 0.35), land = sClamp(k, 1.4, 1.75);   // moon-dust puffs at take-off and landing + footprints left on the pedestal
-      const fpA = sClamp(k, 0.25, 0.4) * (1 - sClamp(k, 1.6, 1.8)); if (fpA > 0) { c.globalAlpha = fpA * 0.7; c.fillStyle = '#9aa3b8';
-        for (const [ox, rot] of [[-0.42, -0.25], [-0.15, 0.2], [0.18, -0.2], [0.45, 0.25]]) { c.save(); c.translate(cx + ox * r, cy + r * 1.0); c.rotate(rot); c.beginPath(); c.ellipse(0, 0, r * 0.08, r * 0.035, 0, 0, TAU); c.fill(); c.restore(); } }
-      for (const [t0, ph] of [[lift, 0], [land, 1]]) { if (t0 <= 0 || t0 >= 1) continue; for (let j = 0; j < 7; j++) { const sd = j % 2 ? 1 : -1, d = r * (0.4 + t0 * 0.9) * (0.6 + (j % 3) * 0.25);
-        c.globalAlpha = (1 - t0) * 0.7; c.fillStyle = '#d6dbe8'; c.beginPath(); c.arc(cx + sd * d, cy + r * 0.95 - t0 * r * 0.25 * (1 + (j % 3) * 0.3), r * (0.07 + t0 * 0.08), 0, TAU); c.fill(); } }
-      c.globalAlpha = 1; break; }
-    case 10: { const d = sClamp(k, 0.05, 0.4), bounce = k > 0.4 && k < 0.55 ? Math.sin(sClamp(k, 0.4, 0.55) * Math.PI) * r * 0.05 : 0, out = sClamp(k, 1.6, 1.8);   // shades drop on + smug brow
-      const [ey, es, ez] = T.e, gy = by + ey * r - (1 - sEase(d)) * r * 1.6 + bounce - out * r * 1.6;
-      c.save(); c.globalAlpha = 1 - out; c.fillStyle = '#0a0a0f'; c.strokeStyle = '#e6e6ee'; c.lineWidth = Math.max(1, r * 0.03);
-      for (const sd of [-1, 1]) { const lx = bx + sd * es * r; c.beginPath(); c.roundRect(lx - r * 0.29, gy - r * 0.16, r * 0.56, r * 0.32, r * 0.1); c.fill(); c.stroke(); c.fillStyle = 'rgba(255,255,255,.35)'; c.fillRect(lx - r * 0.15, gy - r * 0.07, r * 0.12, r * 0.04); c.fillStyle = '#0a0a0f'; }
-      c.beginPath(); c.moveTo(bx - es * r + r * 0.24, gy - r * 0.04); c.lineTo(bx + es * r - r * 0.24, gy - r * 0.04); c.stroke();
-      const br = sEase(sClamp(k, 0.6, 0.8)) * (1 - out); if (br > 0) { c.strokeStyle = '#e6e6ee'; c.lineWidth = r * 0.06; c.lineCap = 'round'; c.beginPath(); c.moveTo(bx + es * r - r * 0.22, gy - r * 0.25 - br * r * 0.14); c.lineTo(bx + es * r + r * 0.2, gy - r * 0.3 - br * r * 0.22); c.stroke(); }
+    case 8: { if (k >= 0.3 && k < 1.45) { const sp = sEase(sClamp(k, 0.3, 0.5)) * (1 - sEase(sClamp(k, 1.28, 1.45))), rr = r * 0.78 * sp;   // three mini Nebulas orbit
+        if (k < 0.42) { c.globalAlpha = 1 - sClamp(k, 0.3, 0.42); c.fillStyle = '#e8c8ff'; c.beginPath(); c.arc(cx, cy, r * (1 + sClamp(k, 0.3, 0.42) * 0.4), 0, TAU); c.fill(); c.globalAlpha = 1; }
+        for (let j = 0; j < 3; j++) { const an = j * TAU / 3 + (k - 0.3) * 7, mx = cx + Math.cos(an) * rr, my = cy + Math.sin(an) * rr * 0.7;
+          c.globalAlpha = 0.35; c.strokeStyle = '#c79bff'; c.lineWidth = r * 0.04; c.beginPath(); c.arc(mx, my, r * 0.5, an + 1.6, an + 2.6); c.stroke(); c.globalAlpha = 1;
+          drawBot(c, 8, mx, my, r * (0.38 + 0.12 * sp), { a: an * 0.3, expr: 'cheer', t: k * 6 + j, glint: 1, lx: -Math.cos(an), ly: -Math.sin(an) }); } }
+      const bm = sClamp(k, 1.45, 2.1); if (bm > 0 && bm < 1) {   // cosmic BOOM: flash + double ring shockwave
+        if (bm < 0.25) { c.globalAlpha = 1 - bm * 4; c.fillStyle = '#ffffff'; c.beginPath(); c.arc(cx, cy, r * (1.1 + bm * 2), 0, TAU); c.fill(); }
+        for (const [o, col] of [[0, '#f0c8ff'], [0.12, '#8fb4ff']]) { const q = sClamp(bm, o, 1); if (q <= 0) continue; c.globalAlpha = 1 - q; c.strokeStyle = col; c.lineWidth = r * 0.12 * (1 - q) + 1; c.beginPath(); c.ellipse(cx, cy, r * (1 + q * 1.15), r * (1 + q * 1.15) * 0.92, 0, 0, TAU); c.stroke(); }
+        c.globalAlpha = 1; } break; }
+    case 9: { const sa = sClamp(k, 0.12, 0.24) * (1 - sClamp(k, 0.85, 1.05));   // alarm-clock star rings, gets grumbled at, flees
+      if (sa > 0) { const ring = k > 0.25 && k < 0.75, sx = cx + r * 1.0 + (ring ? Math.sin(k * 90) * r * 0.05 : 0) + sClamp(k, 0.85, 1.05) * r * 0.8, sy = cy - r * 1.05 - sClamp(k, 0.85, 1.05) * r * 0.6, q = r * 0.42 * (0.6 + 0.4 * sClamp(k, 0.12, 0.24));
+        c.globalAlpha = sa; c.fillStyle = '#ffcc33'; c.beginPath(); for (let j = 0; j < 10; j++) { const an = j / 10 * TAU - Math.PI / 2, d = j % 2 ? q * 0.45 : q; c.lineTo(sx + Math.cos(an) * d, sy + Math.sin(an) * d); } c.closePath(); c.fill();
+        c.fillStyle = '#fff4c8'; c.beginPath(); c.arc(sx, sy, q * 0.38, 0, TAU); c.fill(); c.strokeStyle = '#7a5200'; c.lineWidth = Math.max(1, q * 0.08); c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx, sy - q * 0.28); c.moveTo(sx, sy); c.lineTo(sx + q * 0.2, sy + q * 0.05); c.stroke();
+        c.fillStyle = '#ffcc33'; for (const sd of [-1, 1]) { c.beginPath(); c.arc(sx + sd * q * 0.55, sy - q * 0.85, q * 0.2, 0, TAU); c.fill(); }
+        if (ring) { c.strokeStyle = '#fff27a'; c.lineWidth = Math.max(1, r * 0.03); for (let j = 0; j < 3; j++) { c.beginPath(); c.arc(sx, sy, q * (1.2 + j * 0.25 + ((k * 6) % 1) * 0.2), -2.4 - j * 0.1, -0.7 + j * 0.1); c.stroke(); } sTxt(c, 'BRRING!', sx - r * 0.1, sy - q * 1.65, r * 0.22, '#fff27a', sa); }
+        c.globalAlpha = 1; }
+      const gr = sClamp(k, 0.72, 0.8) * (1 - sClamp(k, 1.05, 1.15)); if (gr > 0) { c.globalAlpha = gr; c.strokeStyle = '#ff7a7a'; c.lineWidth = Math.max(1.5, r * 0.04); c.beginPath();   // grumble scribble
+        for (let t = 0; t <= 1; t += 0.05) c.lineTo(bx - r * 0.75 + t * r * 0.7, by - r * 1.15 + Math.sin(t * 40 + k * 20) * r * 0.07); c.stroke(); sTxt(c, 'hmph', bx - r * 0.4, by - r * 1.4, r * 0.22, '#ffb3b3', gr); c.globalAlpha = 1; }
+      const bl = sEase(sClamp(k, 1.12, 1.42)); if (bl > 0) { const top = cy + r * 1.05 - bl * r * 0.62, fade = 1 - sClamp(k, 2.25, 2.4);   // fluffy cloud blanket pulled up
+        c.globalAlpha = fade; c.fillStyle = '#eef1fb'; c.beginPath(); c.rect(cx - r * 1.08, top, r * 2.16, cy + r * 1.06 - top); c.fill();
+        for (let j = 0; j < 6; j++) { c.beginPath(); c.arc(cx - r * 0.95 + j * r * 0.38, top + Math.sin(j * 2) * r * 0.03, r * 0.24, 0, TAU); c.fill(); }
+        c.fillStyle = '#b9c6e8'; for (let j = 0; j < 5; j++) { c.beginPath(); c.arc(cx - r * 0.7 + j * r * 0.35, top + r * 0.35 + (j % 2) * r * 0.2, r * 0.045, 0, TAU); c.fill(); }
+        if (k > 1.45) { const ph = ((k - 1.45) / 0.42) % 1, br = r * (0.04 + 0.22 * ph);   // snore bubble grows and pops
+          c.strokeStyle = 'rgba(200,225,255,.9)'; c.fillStyle = 'rgba(200,225,255,.25)'; c.lineWidth = Math.max(1, r * 0.025); c.beginPath(); c.arc(cx + r * 0.55 + br * 0.7, cy + r * 0.05 - br * 0.5, br, 0, TAU); c.fill(); c.stroke();
+          sTxt(c, 'z', cx + r * 0.95, cy - r * 0.75 - ph * r * 0.3, r * 0.2, '#eef3ff', fade * (1 - ph)); }
+        c.globalAlpha = 1; } break; }
+    case 10: { const vis = !P.hide && (P.scale == null || P.scale > 0.05); if (!vis) break; const sc = P.scale == null ? 1 : P.scale, d = sClamp(k, 0.05, 0.35), drop = k < 0.4 ? (1 - sEase(d)) * r * 1.6 : 0;   // shades stay on through the whole trip
+      const [ey, es] = T.e; c.save(); c.translate(bx, by); c.rotate(P.a); c.scale(sc, sc); c.translate(0, -drop); c.globalAlpha = sClamp(k, 0.05, 0.12);
+      c.fillStyle = '#0a0a0f'; c.strokeStyle = '#e6e6ee'; c.lineWidth = Math.max(1, r * 0.03);
+      for (const sd of [-1, 1]) { const lx = sd * es * r; c.beginPath(); c.roundRect(lx - r * 0.29, ey * r - r * 0.16, r * 0.56, r * 0.32, r * 0.1); c.fill(); c.stroke(); c.fillStyle = 'rgba(255,255,255,.35)'; c.fillRect(lx - r * 0.18, ey * r - r * 0.09, r * 0.13, r * 0.045); c.fillStyle = '#0a0a0f'; }
+      c.beginPath(); c.moveTo(-es * r + r * 0.29, ey * r - r * 0.05); c.lineTo(es * r - r * 0.29, ey * r - r * 0.05); c.stroke();
+      const br = Math.max(sEase(sClamp(k, 0.22, 0.38)) * (1 - sClamp(k, 0.45, 0.55)), sEase(sClamp(k, 2.42, 2.6)));   // smug brow (before + after)
+      if (br > 0) { c.lineWidth = r * 0.06; c.lineCap = 'round'; c.beginPath(); c.moveTo(es * r - r * 0.22, ey * r - r * 0.27 - br * r * 0.14); c.lineTo(es * r + r * 0.2, ey * r - r * 0.32 - br * r * 0.22); c.stroke(); }
       c.restore(); break; }
   }
   c.globalAlpha = 1;
@@ -2668,10 +2694,10 @@ function sigSound(i) {
     () => { tone(660, 880, 0.3, 'sine', 0.07); tone(880, 1180, 0.32, 'sine', 0.06, 0.25); [0.5, 0.7, 0.9].forEach(d => tone(1400, 1750, 0.06, 'sine', 0.035, d)); }, // Harry: aww + heart pops
     () => { tone(900, 1450, 0.12, 'sawtooth', 0.035); tone(1450, 780, 0.28, 'sawtooth', 0.035, 0.12); tone(2200, 2600, 0.05, 'sine', 0.03, 0.55); },  // Hexa: nya~
     () => { tone(520, 230, 0.75, 'triangle', 0.06); for (let j = 0; j < 6; j++) tone(2100 + j * 140, 1900, 0.025, 'sine', 0.02, 0.9 + j * 0.11); },     // Nimbus: yawn + drizzle
-    () => { tone(520, 1040, 0.6, 'triangle', 0.045); [0.4, 0.5, 0.6, 0.7, 0.8, 0.9].forEach((d, j) => tone(660 * Math.pow(1.122, j), 700 * Math.pow(1.122, j), 0.12, 'sine', 0.05, d)); [1.0, 1.15, 1.3, 1.45].forEach(d => tone(2200, 1800, 0.08, 'sine', 0.02, d)); },  // Bloom: twirl whoosh, rising sprout plinks, petal-shower tinkles
-    () => { tone(110, 330, 1.1, 'sawtooth', 0.025); tone(1568, 3136, 0.5, 'sine', 0.05, 0.55); [0, 0.1, 0.2].forEach(d => tone(2637, 2600, 0.05, 'sine', 0.04, 0.85 + d)); tone(3000, 200, 0.12, 'square', 0.05, 1.25); [1.3, 1.36, 1.42, 1.5].forEach((d, j) => tone(1200 + j * 400, 900, 0.07, 'triangle', 0.035, d)); },  // Nebula: cosmic swell, star-birth glissando, twinkles, POP + confetti
-    () => { tone(260, 520, 0.3, 'sine', 0.04, 0.12); tone(784, 1046, 1.1, 'sine', 0.035, 0.3); tone(523, 392, 1.0, 'triangle', 0.03, 0.5); tone(180, 120, 0.2, 'triangle', 0.05, 1.45); tone(1318, 1310, 0.6, 'sine', 0.03, 1.5); },  // Luna: soft lift, floaty low-gravity glide, gentle landing puff
-    () => { tone(2400, 2150, 0.05, 'square', 0.04, 0.38); tone(140, 105, 0.45, 'sawtooth', 0.05, 0.5); tone(650, 140, 0.9, 'sine', 0.04, 0.6); },      // Grok: clink, smug bass, swirl
+    () => { tone(480, 620, 0.22, 'triangle', 0.05, 0.08); tone(560, 760, 0.25, 'triangle', 0.055, 0.32); tone(1900, 260, 0.2, 'sawtooth', 0.09, 0.56); tone(1000, 180, 0.16, 'square', 0.05, 0.58); [784, 988, 1175, 988, 784, 1175, 1319].forEach((f, j) => tone(f, f, 0.08, 'triangle', 0.04, 1.05 + j * 0.13)); },  // Bloom: ah.. ah.. ACHOO + pizzicato flower dance
+    () => { tone(420, 620, 0.1, 'sine', 0.07, 0.3); tone(620, 900, 0.1, 'sine', 0.07, 0.38); tone(900, 1300, 0.1, 'sine', 0.07, 0.46); tone(300, 330, 0.85, 'sine', 0.03, 0.5); tone(450, 420, 0.85, 'triangle', 0.02, 0.5); tone(170, 38, 0.75, 'sine', 0.15, 1.45); tone(2600, 90, 0.32, 'sawtooth', 0.05, 1.45); tone(1760, 1770, 0.6, 'sine', 0.03, 1.62); },  // Nebula: bloop-bloop-bloop, orbit warble, cosmic BOOM
+    () => { tone(110, 110, 0.25, 'sine', 0.03); for (let j = 0; j < 9; j++) tone(j % 2 ? 2400 : 2000, j % 2 ? 2400 : 2000, 0.035, 'square', 0.04, 0.25 + j * 0.055); tone(190, 140, 0.28, 'sawtooth', 0.045, 0.75); tone(150, 175, 0.2, 'sawtooth', 0.035, 0.95); tone(900, 280, 0.3, 'triangle', 0.03, 1.12); tone(85, 110, 0.45, 'sawtooth', 0.035, 1.5); tone(1150, 1500, 0.28, 'sine', 0.02, 1.98); },  // Luna: alarm BRRING, grumble, blanket swish, snore-whistle
+    () => { tone(2400, 2150, 0.05, 'square', 0.04, 0.12); tone(55, 180, 0.6, 'sawtooth', 0.04, 0.3); tone(900, 70, 0.7, 'sine', 0.06, 0.5); tone(50, 52, 0.9, 'sine', 0.05, 1.12); tone(70, 1500, 0.18, 'triangle', 0.06, 1.9); tone(480, 1250, 0.09, 'square', 0.06, 2.08); tone(2400, 2150, 0.05, 'square', 0.04, 2.2); tone(140, 105, 0.45, 'sawtooth', 0.05, 2.45); },  // Grok: clink, hole opens, spiral in, void hum, flip, POP, clink, smug bass
   ];
   (S[i] || S[0])();
 }
@@ -2683,7 +2709,7 @@ function drawSigFrame(c, i, W, H, seen, R, tt) {
   const r = W * 0.24, cx = W / 2 + wob, cy = H * 0.5 + bob, breathe = 1 + Math.sin(tt * 2.4 + i * 0.7) * 0.025;
   const P = sig ? sigPose(i, k, r) : null;
   if (sig) sigFx(c, i, cx, cy, r, k, P, false);
-  drawBot(c, i, cx + (P ? P.dx : 0), cy + (P ? P.dy : 0), r, { a: P ? P.a : (R ? Math.sin(k * 30) * 0.12 * (1 - k) : Math.sin(tt * 1.3 + i) * 0.03), sx: (P ? P.sx : 1) / breathe, sy: (P ? P.sy : 1) * breathe,
+  if (!(P && P.hide)) drawBot(c, i, cx + (P ? P.dx : 0), cy + (P ? P.dy : 0), r * (P && P.scale != null ? P.scale : 1), { a: P ? P.a : (R ? Math.sin(k * 30) * 0.12 * (1 - k) : Math.sin(tt * 1.3 + i) * 0.03), sx: (P ? P.sx : 1) / breathe, sy: (P ? P.sy : 1) * breathe,
     lx: P && P.lx != null ? P.lx : Math.sin(tt * 0.7 + i) * 0.4, ly: P && P.ly != null ? P.ly : 0.15, blink: P && P.blink != null ? P.blink : blinkAt(tt * 0.8, i * 1.37),
     expr: !seen ? null : P ? P.expr : null, blush: P ? P.blush : 0, t: tt + (P ? P.tAdd : 0), glint: P ? P.glint : 0 });
   if (!seen) { c.globalCompositeOperation = 'source-atop'; c.fillStyle = '#0b0b14'; c.fillRect(0, 0, W, H); c.globalCompositeOperation = 'source-over';
@@ -2721,7 +2747,7 @@ function colFrame(now) {
   colCards.forEach((cd, i) => {
     const c = cd.ctx, W = cd.cv.width, H = cd.cv.height; if (!W) return;
     c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
-    const T = TIERS[i], R = cd.react; if (R) { R.t += dt; if (R.t > (R.kind === 'sig' ? SIG_DUR : 1.0)) cd.react = null; }
+    const T = TIERS[i], R = cd.react; if (R) { R.t += dt; if (R.t > (R.kind === 'sig' ? SIG_DURS[i] : 1.0)) cd.react = null; }
     const { r, cy } = drawSigFrame(c, i, W, H, cd.seen, cd.react, colT);
     // behind the bot: spotlight cone, pedestal, shadow
     c.globalCompositeOperation = 'destination-over';
@@ -2822,7 +2848,7 @@ window.GrokDrop = {
  ed: { get tool() { return edTool; }, setTool(t) { edTool = t; updateEditorUI(); }, set tier(t) { edTier = t; }, get gMul() { return gMul; }, get timeScale() { return timeScale; }, get rest() { return REST; }, get mu() { return MU_D; },
     setGravity: edSetGravity, setDir: edSetDir, setRest: edSetRest, setMu: edSetMu, setTime: edSetTime, undo: edUndo, save: edSave, load: edLoad, get undoN() { return undoStack.length; }, singularity: edSingularity, interact: edInteract, meteor: edMeteor, toggle: edToggle, pin: edPin, setTier: edSetTier,
     get flags() { return { unlockAll: unlockAll(), hit: edHit, infShake: edInfShake, noOver: edNoOver, hideUI: document.body.classList.contains('hideui') }; }, get dragging() { return !!edDrag; } },
- col: { tap: i => tapCard(i), get lastMove() { return colLastMove; }, SIG_IDS, SIG_DUR, frame: (c, i, W, H, k, seen = true) => drawSigFrame(c, i, W, H, seen, k < 0 ? null : { kind: seen ? 'sig' : 'wobble', t: k }, 1.0), get reacts() { return colCards.map(o => o.react && o.react.id); } },
+ col: { tap: i => tapCard(i), get lastMove() { return colLastMove; }, SIG_IDS, SIG_DUR, SIG_DURS, frame: (c, i, W, H, k, seen = true) => drawSigFrame(c, i, W, H, seen, k < 0 ? null : { kind: seen ? 'sig' : 'wobble', t: k }, 1.0), get reacts() { return colCards.map(o => o.react && o.react.id); } },
   openCollection, closeCollection, get colOpen() { return colOpen; }, set hold(v) { testHold = !!v; last = performance.now(); acc = 0; }, enterEditor, exitEditor, get mode() { return mode; }, setMode, openModes, closeModes, get menuOpen() { return menuOpen; },
   get gravity() { return { gx, gy, dir: gdir, flipT, turning: turnT >= 0, nextDir, flips, hold: flipHold, ceil: ceilY }; }, flipIn(s) { flipT = s; }, fill: () => fillFrac(), get zenCleared() { return zenCleared; }, get padOn() { return padOn; }, get padPlaying() { return !!pad; }, setPad, get dangerT() { return dangerT; }, contactsDbg() { const o = []; for (let k = 0; k < ccount; k++) { const C = cpool[k]; const ca = Math.cos(C.a.a), sa = Math.sin(C.a.a); o.push({ a: C.a.id, b: C.b ? C.b.id : null, nx: +C.nx.toFixed(3), ny: +C.ny.toFixed(3), px: +(C.a.x + C.ax * ca - C.ay * sa).toFixed(2), py: +(C.a.y + C.ax * sa + C.ay * ca).toFixed(2), dep: +C.dep.toFixed(2), lam: +C.lam.toFixed(3) }); } return o; }, physStats, haptic, get vibe() { return vibeOn; }, set vibe(v) { setVibe(v); }, canVibe, get finEnd() { return finEnd; }, get interaction() { return inter; }, set interactions(v) { interOn = v; if (!v) inter = null; }, interact(kind) { inter = pickInteraction(kind); return !!inter; }, hfGeom, HF: { IN: HF_IN, HOLD: HF_HOLD, OUT: HF_OUT }, pickKind, slapDbg: { get log() { return slapLog; }, get pending() { return pendingRet; }, cd: slapCD, blocked: (a, b) => slapBlocked(a, b), tick(dt) { time += dt; updateInteraction(dt); } }, get time() { return time; },
   shake: doShake, get shakeCharges() { return shakeCharges; }, set shakeCharges(v) { shakeCharges = v; updateShakeUI(); }, get shakeT() { return shakeT; }, get shakeCalm() { return shakeCalm; }, get shakeCD() { return shakeCD; }, catchWish: (cx = 100, cy = 100) => catchWish({ life: 0, max: 1 }, cx, cy),
