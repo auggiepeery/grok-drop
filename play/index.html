@@ -98,8 +98,6 @@
   .colCard.locked .nm,.colCard.locked .desc{color:rgba(255,255,255,.32)}
   .colCard.locked .cnt{color:rgba(255,255,255,.3)}
   @media (max-width:520px){#colGrid{grid-template-columns:repeat(2,1fr);gap:10px;padding:8px 10px 22px}.colCard{padding:4px 8px 10px}.colCard .desc{font-size:11px;min-height:58px}.colTitle{font-size:15px;letter-spacing:3px}}
-  #padBtn{display:none}
-  body.mode-zen #padBtn{display:flex}
   .toggles{display:flex;gap:8px;justify-content:center;margin:12px 0 4px;flex-wrap:wrap}
   .card .tog{display:flex;align-items:center;gap:6px;margin:0;padding:8px 12px;border-radius:999px;font-size:13px;font-weight:800;background:rgba(46,230,184,.18);color:#fff;box-shadow:inset 0 0 0 1px rgba(46,230,184,.6);min-width:0}
   .card .tog .ic{width:18px;height:18px;display:inline-flex}.card .tog svg{width:18px;height:18px}
@@ -264,7 +262,7 @@
       <div class="toggles">
         <button class="tog" id="muteBtn" aria-label="Toggle sound"><span class="ic"></span><span class="lb">Sound</span></button>
         <button class="tog" id="vibeBtn" aria-label="Toggle vibration" title="Vibration (V)"><span class="ic"></span><span class="lb">Haptics</span></button>
-        <button class="tog" id="padBtn" aria-label="Ambient music" title="Ambient music (N)"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg></span><span class="lb">Zen pad</span></button>
+        <button class="tog" id="padBtn" aria-label="Music" title="Music (N)"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg></span><span class="lb">Zen pad</span></button>
       </div>
       <div class="hint">Drag / move to aim · release or Space to drop · P to pause</div>
     </div>
@@ -564,7 +562,7 @@ function ensureAudio() {
       const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     }
     if (actx.state === 'suspended') actx.resume();
-    if (mode === 'zen') startPad();
+    startPad();
   } catch (e) { actx = null; }
 }
 function tone(f0, f1, dur, type = 'sine', vol = 0.3, delay = 0) {
@@ -1275,8 +1273,15 @@ function doMerge(a, b) {
     floatText(x, y - T.r - 26, 'NEW!', 22, '#ffd23f', 1.4); sfx.unlock(); haptic('unlock');
   } else if (nt > topReached) { topReached = nt; drawLadder(); }
   if (combo >= 2) { comboStep(); floatText(x + T.r * 0.6, y - T.r * 0.9, 'x' + combo, 18 + Math.min(combo, 6) * 3, '#ffd23f', 0.9); shake = Math.max(shake, Math.min(3 + combo * 2, 14)); floats = floats.filter(f => !f.combo); const f = floatText(WW / 2, JT + 80, 'COMBO x' + combo, 24 + Math.min(combo, 6) * 3, '#ffffff'); f.combo = true; }
-  if (T.grok) { flash = 0.7; shake = 16; sfx.grok(); particles.push({ type: 'shock', x, y, r: 420, life: 0, max: 0.9, color: '#ffffff' }); burst(x, y, '#ffffff', 50, 520, 3.5); }
+  if (T.grok) { flash = 0.7; shake = 16; sfx.grok(); particles.push({ type: 'shock', x, y, r: 420, life: 0, max: 0.9, color: '#ffffff' }); burst(x, y, '#ffffff', 50, 520, 3.5); groksAwe(nb); }
 }
+// everyone else turns to stare at a freshly merged Grok (visual only; cooldown so back-to-back Groks don't spam it)
+let wishStreak = 0; const WISH_BONUS = [0, 0, 150, 300, 500, 700];   // streak x2..x5 (capped at x5)
+let lastAwe = -1e9; const AWE_CD = 6, AWE_T = 1.2;
+function groksAwe(g) { if (time - lastAwe < AWE_CD) return false; lastAwe = time; let n = 0;
+  for (const o of bots) { if (o === g || o.dead) continue; o.look = { x: g.x, y: g.y, t: AWE_T, ease: true, track: g }; react(o, 'awe', AWE_T);
+    if (n < 3 && o.r > 16) { floatText(o.x, o.y - o.r - 8, 'ooh', 12 + Math.min(6, o.r / 12), '#e8f0ff', 1.0); n++; } }
+  return true; }
 
 // ================================================================ actions
 function clampAim(x) { const T = TIERS[curTier]; return Math.max(JL - T.ux0 * T.r + 1, Math.min(JR - T.ux1 * T.r - 1, x)); }
@@ -1470,6 +1475,7 @@ function gameOver() {
   }, F + Math.min(list.length * per, 600) + 200);   // card <= 0.8 s after the freeze
 }
 function restart() {
+  wishStreak = 0;
   pendingRet = null; slapCD.clear(); slapLog = []; runId++; shakeCharges = 1; shakeT = shakeCalm = shakeCD = 0;
   bots = []; particles = []; floats = []; finale = null; finEnd = null; interT = 3; inter = null;
   score = 0; dangerT = 0; dropQ = false; runMerges = 0; overT = -1; overBot = dangerBot = null; overInfo = null; combo = 0; comboT = 9; shake = 0; flash = 0; aiming = false; dropCD = 0.2; topReached = 0;
@@ -1690,7 +1696,7 @@ window.addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT') return;
   if (colOpen) { if (k === 'Escape' || k === 'c' || k === 'C') closeCollection(); e.preventDefault(); return; }
   if (menuOpen) { if (k === 'Escape') closeModes(false); e.preventDefault(); return; }
-  if ((k === 'n' || k === 'N') && mode === 'zen') { setPad(!padOn); return; }
+  if (k === 'n' || k === 'N') { setPad(!padOn); return; }
   if ((k === 'c' || k === 'C') && !modalOpen) { openCollection(); return; }
   if (modalOpen) { if (k === 'Escape') closeCode(); e.preventDefault(); return; }
   if ((k === 's' || k === 'S') && !e.repeat && (state === 'playing' || state === 'editor')) { ensureAudio(); doShake(); e.preventDefault(); return; }
@@ -1791,7 +1797,8 @@ function drawBot(c, t, x, y, r, o = {}) {
   const happy = ex === 'happy' || ex === 'cheer' || ex === 'squint' ? 1 : 0;
   const lidBase = ex === 'yawn' ? 0.7 : ex === 'hurt' ? 0.4 : ex === 'shock' ? 0 : ex === 'annoyed' ? 0.45 : ex === 'nervous' ? 0 : ex === 'smug' || ex === 'smirk' ? 0.4 : (ex ? 0 : T.lid || 0);
   const blink = Math.max(o.blink || 0, lidBase);
-  const ew = 0.15 * ez * (ex === 'shock' ? 1.15 : 1), eh = 0.36 * ez * (ex === 'shock' ? 1.15 : 1) * (1 - 0.88 * blink);
+  const aw = o.awe != null ? o.awe : ex === 'awe' ? 1 : 0, esc = (ex === 'shock' ? 1.15 : 1) * (1 + 0.3 * aw);
+  const ew = 0.15 * ez * esc, eh = 0.36 * ez * esc * (1 - 0.88 * blink);
   c.fillStyle = T.eye; c.strokeStyle = T.eye;
   for (const side of [-1, 1]) {
     const winking = o.wink && side === 1;
@@ -1811,9 +1818,9 @@ function drawBot(c, t, x, y, r, o = {}) {
     }
     c.restore();
     // brows (character + mood)
-    const brow = ex === 'annoyed' ? -1.4 : ex === 'nervous' ? 1.2 : ex === 'shock' ? 1.5 : ex ? (T.brow || 0) * 0.5 : (T.brow || 0);
-    if (r > 9 && (brow <= -0.5 || ex === 'nervous' || ex === 'shock' || ex === 'annoyed')) {
-      c.save(); c.translate(side * es + (T.grok ? 0.06 : 0), ey - 0.26 * ez - (ex === 'shock' ? 0.08 : 0)); c.rotate(side * brow * -0.35 * (ex === 'nervous' ? -1 : 1));
+    const brow = ex === 'annoyed' ? -1.4 : ex === 'nervous' ? 1.2 : ex === 'shock' || ex === 'awe' ? 1.5 : ex ? (T.brow || 0) * 0.5 : (T.brow || 0);
+    if (r > 9 && (brow <= -0.5 || ex === 'nervous' || ex === 'shock' || ex === 'awe' || ex === 'annoyed')) {
+      c.save(); c.translate(side * es + (T.grok ? 0.06 : 0), ey - 0.26 * ez - (ex === 'shock' ? 0.08 : ex === 'awe' ? 0.14 * ez : 0)); c.rotate(ex === 'awe' ? side * 0.32 : side * brow * -0.35 * (ex === 'nervous' ? -1 : 1));   // awe: raised, inner-up brows
       c.lineWidth = 0.05 * ez; c.lineCap = 'round'; c.beginPath(); c.moveTo(-ew * 0.9, 0); c.lineTo(ew * 0.9, 0); c.stroke(); c.restore(); }
   }
   // mouth (each bot has its own resting mouth; moods override)
@@ -1828,6 +1835,9 @@ function drawBot(c, t, x, y, r, o = {}) {
     c.font = `${fs}px system-ui,"Apple Color Emoji","Segoe UI Emoji",sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('💢', 0, 0); c.restore(); }
   // sweat drop
   if (T.nebula && r > 9 && !o.blink) { c.fillStyle = '#fff'; for (const sx of [-es, es]) { const cx = sx + 0.06 * ez, cy = ey - 0.1 * ez, q = 0.07 * ez; c.beginPath(); c.moveTo(cx, cy - q); c.lineTo(cx + q * 0.25, cy - q * 0.25); c.lineTo(cx + q, cy); c.lineTo(cx + q * 0.25, cy + q * 0.25); c.lineTo(cx, cy + q); c.lineTo(cx - q * 0.25, cy + q * 0.25); c.lineTo(cx - q, cy); c.lineTo(cx - q * 0.25, cy - q * 0.25); c.closePath(); c.fill(); } }   // star glints in the eyes
+  if (aw > 0.05 && r > 9) { c.fillStyle = `rgba(255,255,255,${aw})`;   // awe: tiny sparkle stars in both eyes
+    for (const side of [-1, 1]) { const sx2 = side * es + llx * 0.09 + (T.grok ? 0.06 : 0) - ew * 0.15, sy2 = ey + lly * 0.07 - eh * 0.22, q = ew * 0.55 * aw;
+      c.beginPath(); c.moveTo(sx2, sy2 - q); c.quadraticCurveTo(sx2, sy2, sx2 + q, sy2); c.quadraticCurveTo(sx2, sy2, sx2, sy2 + q); c.quadraticCurveTo(sx2, sy2, sx2 - q, sy2); c.quadraticCurveTo(sx2, sy2, sx2, sy2 - q); c.fill(); } }
   if (ex === 'hurt' && r > 9) { const ph = ((o.t || 0) * 0.8) % 1; c.fillStyle = `rgba(140,200,255,${0.95 * (1 - ph * 0.7)})`;   // teary: drops roll from both eyes
     for (const sx of [-es, es]) { c.beginPath(); c.ellipse(sx, ey + 0.16 * ez + ph * 0.3, 0.05 * ez, 0.075 * ez, 0, 0, TAU); c.fill(); } }
   if (o.sweat > 0 && r > 9) { const ph = ((o.t || 0) * 1.3) % 1; c.fillStyle = `rgba(150,215,255,${0.9 * (1 - ph)})`; c.save(); c.translate(es + 0.22 * ez, ey - 0.25 * ez + ph * 0.3); c.scale(0.07 * ez, 0.07 * ez);
@@ -1837,7 +1847,7 @@ function drawBot(c, t, x, y, r, o = {}) {
 function drawMouth(c, T, ex, ey, ez, o) {
   const my = ey + 0.27 * ez, mw = 0.17 * ez, col = T.eye;
   c.save(); c.translate(T.grok ? 0.05 : 0, my); c.strokeStyle = col; c.fillStyle = col; c.lineCap = 'round'; c.lineJoin = 'round'; c.lineWidth = 0.055 * ez;
-  const m = ex === 'happy' || ex === 'cheer' ? 'open' : ex === 'shock' || ex === 'yawn' ? 'O' : ex === 'annoyed' || ex === 'hurt' ? 'frown' : ex === 'nervous' ? 'wavy' : ex === 'squint' ? 'grin' : ex === 'smirk' || ex === 'smug' ? 'smirk' : ex === 'blushing' || ex === 'smile' ? 'smile' : T.mouth;
+  const m = ex === 'happy' || ex === 'cheer' ? 'open' : ex === 'shock' || ex === 'yawn' || ex === 'awe' ? 'O' : ex === 'annoyed' || ex === 'hurt' ? 'frown' : ex === 'nervous' ? 'wavy' : ex === 'squint' ? 'grin' : ex === 'smirk' || ex === 'smug' ? 'smirk' : ex === 'blushing' || ex === 'smile' ? 'smile' : T.mouth;
   c.beginPath();
   switch (m) {
     case 'open': c.moveTo(-mw, 0); c.quadraticCurveTo(0, mw * 1.6, mw, 0); c.closePath(); c.fill();
@@ -1938,7 +1948,7 @@ function spawnShooting(w, h, rare, hole) {
   if (hole) { const a = Math.random() * TAU, d = Math.max(w, h) * (0.55 + Math.random() * 0.3); x = hole.x + Math.cos(a) * d; y = hole.y + Math.sin(a) * d; const v = 700 + Math.random() * 500; vx = (hole.x - x) / d * v; vy = (hole.y - y) / d * v; }
   else { const dir = ang, th = (0.18 + Math.random() * 0.45) * Math.PI / 2, v = (380 + Math.random() * 520) * sp;   // 16..56 deg below horizontal
     x = dir > 0 ? Math.random() * w * 0.7 - w * 0.1 : w * 0.3 + Math.random() * w * 0.8; y = -20 + Math.random() * h * 0.45; vx = dir * Math.cos(th) * v; vy = Math.sin(th) * v; }
-  Object.assign(m, { on: true, x, y, vx, vy, life: 0, max: hole ? 0.8 + Math.random() * 0.5 : (rare ? 1.6 : 0.6 + Math.random() * 0.7) / (zen ? 0.75 : 1),
+  Object.assign(m, { on: true, caught: false, x, y, vx, vy, life: 0, max: hole ? 0.8 + Math.random() * 0.5 : (rare ? 1.6 : 0.6 + Math.random() * 0.7) / (zen ? 0.75 : 1),
     len: (rare ? 0.32 : 0.1 + Math.random() * 0.14) * (hole ? 0.6 : 1), bri: (rare ? 1 : 0.45 + Math.random() * 0.5) * (zen ? 0.6 : 1), rare, hole: !!hole, w: rare ? 2.6 : 0.8 + Math.random() * 0.9, sp: 0,
     tint: rare ? (Math.random() < 0.5 ? '255,214,140' : '170,210,255') : (Math.random() < 0.25 ? '200,220,255' : '255,255,255') });
 }
@@ -1963,7 +1973,7 @@ function drawShooting(dt, w, h) {
       if (m.rare && !REDUCED_MOTION) { m.sp -= dt; if (m.sp <= 0) { m.sp = 0.02; const p = SPARKS.find(q => q.life <= 0); if (p) Object.assign(p, { x: m.x, y: m.y, vx: m.vx * 0.05 + (Math.random() - 0.5) * 40, vy: m.vy * 0.05 + (Math.random() - 0.5) * 40 + 20, life: 0.5 + Math.random() * 0.5, max: 1, tint: m.tint }); } }
     }
     const k = m.life / m.max, a = m.bri * Math.min(1, k / 0.15) * Math.min(1, (1 - k) / 0.35);   // fade in / out
-    if (m.life >= m.max || a <= 0 && k > 0.5) { m.on = false; continue; }
+    if (m.life >= m.max || a <= 0 && k > 0.5) { if (!m.caught && !m.hole && state === 'playing' && wishStreak) wishStreak = 0; m.on = false; continue; }   // an uncaught wish breaks the streak
     const tx = m.x - m.vx * m.len, ty = m.y - m.vy * m.len, g = bctx.createLinearGradient(m.x, m.y, tx, ty);
     g.addColorStop(0, `rgba(${m.tint},${a})`); g.addColorStop(0.25, `rgba(${m.tint},${a * 0.45})`); g.addColorStop(1, `rgba(${m.tint},0)`);
     if (m.rare) { bctx.save(); bctx.shadowColor = `rgba(${m.tint},${a})`; bctx.shadowBlur = 14; }
@@ -1990,11 +2000,20 @@ function hitMeteor(cx, cy, touch) {
   return false;
 }
 function catchWish(m, cx, cy) {
-  m.life = m.max; shWish++; stats.wishes = (stats.wishes | 0) + 1; saveStats();
-  for (let i = 0; i < 22; i++) { const p = SPARKS.find(q => q.life <= 0); if (!p) break; const a = Math.random() * TAU, v = 40 + Math.random() * 150; Object.assign(p, { x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6 + Math.random() * 0.7, tint: i % 3 ? '255,214,120' : '190,230,255' }); }
+  m.life = m.max; m.caught = true; shWish++; stats.wishes = (stats.wishes | 0) + 1;
+  wishStreak++; if (wishStreak > (stats.bestWishStreak | 0)) stats.bestWishStreak = wishStreak; saveStats();
+  const sk = Math.min(wishStreak, 5), bonus = wishStreak >= 2 ? WISH_BONUS[sk] : 0;
+  for (let i = 0; i < 22 + (bonus ? 14 * sk : 0); i++) { const p = SPARKS.find(q => q.life <= 0); if (!p) break; const a = Math.random() * TAU, v = 40 + Math.random() * 150; Object.assign(p, { x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6 + Math.random() * 0.7, tint: i % 3 ? '255,214,120' : '190,230,255' }); }
   ensureAudio(); [880, 1175, 1568, 2093].forEach((f, j) => tone(f, f * 1.01, 0.2, 'sine', 0.05, j * 0.06)); haptic('drop');
-  if (!shakeUnlimited()) { if (shakeCharges < SHAKE_MAX) { shakeCharges++; toast('SHAKE +1 ✨'); } else toast('WISH CAUGHT ✨ · SHAKES FULL'); updateShakeUI(); }
-  else toast(stats.wishes === 1 ? 'MAKE A WISH ✨' : 'WISH CAUGHT ✨ ×' + stats.wishes);
+  let msg, gotShake = false;
+  if (!shakeUnlimited()) { if (shakeCharges < SHAKE_MAX) { shakeCharges++; gotShake = true; msg = 'SHAKE +1 ✨'; } else msg = 'WISH CAUGHT ✨ · SHAKES FULL'; updateShakeUI(); }
+  else msg = stats.wishes === 1 ? 'MAKE A WISH ✨' : 'WISH CAUGHT ✨ ×' + stats.wishes;
+  if (bonus) {   // wish streak: bigger burst, flourish, modest capped bonus
+    if (state === 'playing') addScore(bonus);
+    [1568, 2093, 2637].forEach((f, j) => tone(f, f * 1.01, 0.25, 'triangle', 0.035, 0.26 + j * 0.07));
+    msg = 'WISH STREAK ×' + wishStreak + '! +' + bonus + (gotShake ? ' · SHAKE +1' : '');
+  }
+  toast(msg);
   if (colOpen) buildCollection();
 }
 document.addEventListener('pointerdown', e => {
@@ -2211,14 +2230,16 @@ function render(dt) {
     const slow = TIERS[b.t].luna ? 1.5 : 6;   // Luna: sleepy, slow eyes
     b.lx += ((sp > 40 ? b.vx / sp : (aimX - b.x) / 400) - b.lx) * Math.min(1, dt * slow);
     b.ly += ((sp > 40 ? b.vy / sp : -0.4) - b.ly) * Math.min(1, dt * slow);
-    if (b.look) { const dx = b.look.x - b.x, dy = b.look.y - b.y, dd = Math.hypot(dx, dy) || 1; b.lx = dx / dd; b.ly = dy / dd; }
+    if (b.look) { const L = b.look, lxT = L.track ? L.track.x : L.x, lyT = L.track ? L.track.y : L.y, dx = lxT - b.x, dy = lyT - b.y, dd = Math.hypot(dx, dy) || 1;
+      if (L.ease) { const q = Math.min(1, dt * 9); b.lx += (dx / dd - b.lx) * q; b.ly += (dy / dd - b.ly) * q; } else { b.lx = dx / dd; b.ly = dy / dd; } }
+    b.aweK = (b.aweK || 0) + ((b.expr === 'awe' ? 1 : 0) - (b.aweK || 0)) * Math.min(1, dt * 7);   // wide-eyed awe eases in and out
     const pp = b.pop > 0 ? Math.sin(b.pop * 14) * b.pop * 0.22 : 0;   // squash & stretch wobble
     const nv = b.nerv || 0, ang = b.anger > 0 ? Math.min(1, b.anger) : 0, jit = (nv > 0.4 ? Math.sin(time * 40 + b.id) * nv * 0.8 : 0) + ang * Math.sin(time * 55 + b.id) * 1.1;
     let ex = b.expr || (nv > 0.35 ? 'nervous' : null);
     if (b.fade != null) c.globalAlpha = 1 - b.fade * 0.7;
     const popS = b.spawnFx > 0 ? 1 + 0.12 * Math.sin(Math.PI * (1 - b.spawnFx / SPAWN_FX)) : 1;   // merge pop: drawing only
     drawBot(c, b.t, b.x + jit, b.y, b.r * popS, { a: b.a, lx: b.lx, ly: b.ly, sx: 1 + pp + ang * 0.05, sy: 1 - pp + ang * 0.05,
-      blink: b.blinkT > 0 && ex !== 'shock' ? 1 : 0, happy: b.happy > 0 ? 1 : 0, expr: ex, wink: b.wink, blush: b.blush, sweat: nv > 0.35 ? nv : 0, t: time + b.id, glint: b.glint, anger: ang });
+      awe: b.aweK || 0, blink: b.blinkT > 0 && ex !== 'shock' && ex !== 'awe' ? 1 : 0, happy: b.happy > 0 ? 1 : 0, expr: ex, wink: b.wink, blush: b.blush, sweat: nv > 0.35 ? nv : 0, t: time + b.id, glint: b.glint, anger: ang });
     c.globalAlpha = 1;
   }
   drawInteraction(c);
@@ -2437,25 +2458,44 @@ function zenStep(dt) {
   const v = cand[0]; v.fade = 0; v.mcd = 999; react(v, 'happy', 1.2); wake(v); zenCleared++; zenT = 0.75;
   burst(v.x, v.y, '#ffffff', 6, 60, 2); tone(880, 1175, 0.4, 'sine', 0.04);
 }
-// ---- ambient pad (zen): soft detuned chords through a slowly breathing low-pass
+// ---- ambient space music (all modes): slow drifting pad + soft drone + sparse twinkly arpeggio through a feedback-delay "reverb".
+// Own bus straight to the output (independent of the SFX master/mute); starts on the first gesture via ensureAudio; stops while hidden.
 let pad = null;
-const PAD_CHORDS = [[130.81, 196.0, 246.94, 293.66], [110.0, 164.81, 246.94, 261.63], [87.31, 174.61, 220.0, 329.63], [98.0, 146.83, 246.94, 329.63]];
+const MUS_ROOTS = [55, 49, 43.65, 58.27, 41.2], MUS_VOICINGS = [[-12, 7, 16, 19], [-12, 4, 11, 14], [-12, 7, 14, 21], [-12, 9, 16, 19], [-5, 7, 12, 16]], MUS_SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19];
 function startPad() {
-  if (pad || !actx || mode !== 'zen' || !padOn) return;
-  const t = actx.currentTime, out = actx.createGain(), lp = actx.createBiquadFilter(), lfo = actx.createOscillator(), lg = actx.createGain();
-  out.gain.setValueAtTime(0.0001, t); out.gain.exponentialRampToValueAtTime(0.07, t + 3);
-  lp.type = 'lowpass'; lp.frequency.value = 850; lp.Q.value = 0.6; lfo.frequency.value = 0.07; lg.gain.value = 380; lfo.connect(lg); lg.connect(lp.frequency); lfo.start(t);
-  lp.connect(out); out.connect(master);
-  const vs = [];
-  PAD_CHORDS[0].forEach((f, i) => { for (const det of [-5, 5]) { const o = actx.createOscillator(), g = actx.createGain(); o.type = i ? 'sine' : 'triangle'; o.frequency.value = f; o.detune.value = det; g.gain.value = i ? 0.22 : 0.3; o.connect(g); g.connect(lp); o.start(t); vs.push({ o, i }); } });
-  let ci = 0;
-  const iv = setInterval(() => { if (!pad) return; ci = (ci + 1) % PAD_CHORDS.length; const tt = actx.currentTime; for (const v of vs) v.o.frequency.setTargetAtTime(PAD_CHORDS[ci][v.i], tt, 1.2); }, 8000);
-  pad = { out, vs, lfo, iv };
+  if (pad || !actx || !padOn || document.hidden) return;
+  try {
+    const t = actx.currentTime, zen = mode === 'zen', P2 = st => Math.pow(2, st / 12);
+    const out = actx.createGain(); out.gain.setValueAtTime(0.0001, t); out.gain.exponentialRampToValueAtTime(zen ? 0.12 : 0.09, t + 4); out.connect(softLP || actx.destination);
+    const send = actx.createGain(), dl1 = actx.createDelay(2), dl2 = actx.createDelay(2), fb1 = actx.createGain(), fb2 = actx.createGain(), dlp = actx.createBiquadFilter(), wet = actx.createGain();
+    dl1.delayTime.value = 0.43; dl2.delayTime.value = 0.71; fb1.gain.value = 0.4; fb2.gain.value = 0.33; dlp.type = 'lowpass'; dlp.frequency.value = 2000; wet.gain.value = 0.55;
+    send.connect(dl1); send.connect(dl2); dl1.connect(dlp); dl2.connect(dlp); dlp.connect(fb1); dlp.connect(fb2); fb1.connect(dl1); fb2.connect(dl2); dlp.connect(wet); wet.connect(out);
+    const lp = actx.createBiquadFilter(), lfo = actx.createOscillator(), lg = actx.createGain(), padG = actx.createGain(), ps = actx.createGain();
+    lp.type = 'lowpass'; lp.frequency.value = 650; lp.Q.value = 0.5; lfo.frequency.value = 0.043; lg.gain.value = 300; lfo.connect(lg); lg.connect(lp.frequency); lfo.start(t);
+    padG.gain.value = 1; ps.gain.value = 0.25; lp.connect(padG); padG.connect(out); padG.connect(ps); ps.connect(send);
+    let root = MUS_ROOTS[0], vo = MUS_VOICINGS[0];
+    const oscs = [lfo], vs = [];
+    vo.forEach((st, i) => { const g = actx.createGain(); g.gain.value = 0.1; g.connect(lp);
+      for (const det of [-6, 6]) { const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = root * 4 * P2(st); o.detune.value = det; o.connect(g); o.start(t); oscs.push(o); vs.push({ o, i }); } vs.push({ g, i }); });
+    const dr = actx.createOscillator(), dg = actx.createGain(); dr.type = 'triangle'; dr.frequency.value = root; dg.gain.value = 0.22; dr.connect(dg); dg.connect(lp); dr.start(t); oscs.push(dr);   // soft drone
+    const chordT = () => { if (!pad) return; let nr; do nr = MUS_ROOTS[Math.floor(Math.random() * MUS_ROOTS.length)]; while (nr === root); root = nr; vo = MUS_VOICINGS[Math.floor(Math.random() * MUS_VOICINGS.length)];
+      const tt = actx.currentTime; for (const v of vs) { if (v.o) v.o.frequency.setTargetAtTime(root * 4 * P2(vo[v.i]), tt, 2.4); else v.g.gain.setTargetAtTime(0.06 + Math.random() * 0.08, tt, 3); }
+      dr.frequency.setTargetAtTime(root, tt, 3); pad.chords++; pad.ct = setTimeout(chordT, (zen ? 13000 : 10000) + Math.random() * 6000); };
+    const pluck = (f, when, v) => { const o = actx.createOscillator(), o2 = actx.createOscillator(), g = actx.createGain(); o.type = 'sine'; o2.type = 'triangle'; o.frequency.value = f; o2.frequency.value = f * 2; o2.detune.value = 4;
+      g.gain.setValueAtTime(0.0001, when); g.gain.exponentialRampToValueAtTime(v, when + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, when + 1.6);
+      const g2 = actx.createGain(); g2.gain.value = 0.18; o.connect(g); o2.connect(g2); g2.connect(g); g.connect(out); g.connect(send);
+      o.start(when); o2.start(when); o.stop(when + 1.7); o2.stop(when + 1.7); pad.notes++; };
+    const arp = setInterval(() => { if (!pad || actx.state !== 'running') return; if (Math.random() > (zen ? 0.16 : 0.24)) return;   // sparse, never the same phrase twice
+      const tt = actx.currentTime + 0.05, f = root * 8 * P2(MUS_SCALE[Math.floor(Math.random() * MUS_SCALE.length)]); pluck(f, tt, 0.05 + Math.random() * 0.03);
+      if (Math.random() < 0.3) pluck(f * P2(7), tt + 0.18 + Math.random() * 0.1, 0.03); }, zen ? 420 : 330);
+    pad = { out, oscs, arp, ct: 0, notes: 0, chords: 0 }; pad.ct = setTimeout(chordT, 8000 + Math.random() * 4000);
+  } catch (e) { pad = null; }
 }
 function stopPad() {
-  if (!pad) return; const p = pad; pad = null; clearInterval(p.iv);
-  try { const t = actx.currentTime; p.out.gain.cancelScheduledValues(t); p.out.gain.setTargetAtTime(0.0001, t, 0.5); for (const v of p.vs) v.o.stop(t + 2.5); p.lfo.stop(t + 2.5); } catch (e) {}
+  if (!pad) return; const p = pad; pad = null; clearInterval(p.arp); clearTimeout(p.ct);
+  try { const t = actx.currentTime; p.out.gain.cancelScheduledValues(t); p.out.gain.setTargetAtTime(0.0001, t, 0.4); for (const o of p.oscs) o.stop(t + 2.2); setTimeout(() => { try { p.out.disconnect(); } catch (e) {} }, 2600); } catch (e) {}
 }
+document.addEventListener('visibilitychange', () => { if (!actx) return; if (document.hidden) { stopPad(); actx.suspend && actx.suspend(); } else { actx.resume && actx.resume(); startPad(); } });   // no music (or CPU) while hidden
 function setPad(on) { padOn = on; store(PAD_KEY, on ? '1' : '0'); $('padBtn').classList.toggle('off', !on); if (on) { ensureAudio(); startPad(); } else stopPad(); }
 function applyMode() {
   document.body.classList.remove('mode-classic', 'mode-flip', 'mode-zen'); document.body.classList.add('mode-' + mode);
@@ -2463,7 +2503,7 @@ function applyMode() {
   $('padBtn').classList.toggle('off', !padOn);
   if (master) master.gain.value = muted ? 0 : masterVol();
   if (softLP) softLP.frequency.value = mode === 'zen' ? 2400 : 20000;
-  if (mode === 'zen') startPad(); else stopPad();
+  startPad();
 }
 function masterVol() { return mode === 'zen' ? 0.32 : 0.5; }
 function setMode(m) {
@@ -2549,7 +2589,7 @@ function buildCollection() {
     colGrid.appendChild(d); colCards.push({ el: d, cv, ctx: cv.getContext('2d'), seen, react: null });
   });
   $('colSub').textContent = `${found} / ${TIERS.length} ` + (unlockAll() ? 'SHOWN · ALL UNLOCKED (EDITOR VIEW)' : 'DISCOVERED') + (stats.singularities ? ` · ${stats.singularities} SINGULARIT${stats.singularities === 1 ? 'Y' : 'IES'}` : '');
-  $('wishPlaque').innerHTML = '🌠 WISHES CAUGHT: <b>' + (stats.wishes | 0) + '</b> &nbsp;·&nbsp; 〰️ SHAKES: <b>' + (stats.shakes | 0) + '</b>';
+  $('wishPlaque').innerHTML = '🌠 WISHES CAUGHT: <b>' + (stats.wishes | 0) + '</b> &nbsp;·&nbsp; 🔥 BEST WISH STREAK: <b>×' + (stats.bestWishStreak | 0) + '</b> &nbsp;·&nbsp; 〰️ SHAKES: <b>' + (stats.shakes | 0) + '</b>';
   sizeCollection();
 }
 function sizeCollection() { const dpr = Math.min(devicePixelRatio || 1, 2); for (const c of colCards) { const w = c.cv.clientWidth || 160; c.cv.width = Math.round(w * dpr); c.cv.height = Math.round(w * dpr); c.dpr = dpr; } }
@@ -2896,6 +2936,11 @@ window.GrokDrop = {
  ed: { get tool() { return edTool; }, setTool(t) { edTool = t; updateEditorUI(); }, set tier(t) { edTier = t; }, get gMul() { return gMul; }, get timeScale() { return timeScale; }, get rest() { return REST; }, get mu() { return MU_D; },
     setGravity: edSetGravity, setDir: edSetDir, setRest: edSetRest, setMu: edSetMu, setTime: edSetTime, undo: edUndo, save: edSave, load: edLoad, get undoN() { return undoStack.length; }, singularity: edSingularity, interact: edInteract, meteor: edMeteor, toggle: edToggle, pin: edPin, setTier: edSetTier,
     get flags() { return { unlockAll: unlockAll(), hit: edHit, infShake: edInfShake, noOver: edNoOver, hideUI: document.body.classList.contains('hideui') }; }, get dragging() { return !!edDrag; } },
+ awe: { get last() { return lastAwe; }, CD: AWE_CD },
+ wish: { get streak() { return wishStreak; }, get best() { return stats.bestWishStreak | 0; }, BONUS: WISH_BONUS,
+   spawnCatch() { spawnShooting(innerWidth, innerHeight, false, null); const m = SH_POOL.find(o => o.on && !o.hole && !o.caught && o.life === 0); if (m) catchWish(m, m.x, m.y); return !!m; },
+   spawnMiss() { spawnShooting(innerWidth, innerHeight, false, null); const m = SH_POOL.find(o => o.on && !o.hole && !o.caught && o.life === 0); if (m) m.life = m.max; return !!m; } },
+ music: { get on() { return padOn; }, get playing() { return !!pad; }, get notes() { return pad ? pad.notes : 0; }, get ctx() { return actx ? actx.state : null; }, set: on => setPad(on), get muted() { return muted; } },
  col: { set debugHitbox(v) { colDbg = !!v; }, set freeze(v) { colFreeze = v; }, tap: i => tapCard(i), get lastMove() { return colLastMove; }, SIG_IDS, SIG_DUR, SIG_DURS, frame: (c, i, W, H, k, seen = true) => drawSigFrame(c, i, W, H, seen, k < 0 ? null : { kind: seen ? 'sig' : 'wobble', t: k }, 1.0), get reacts() { return colCards.map(o => o.react && o.react.id); } },
   openCollection, closeCollection, get colOpen() { return colOpen; }, set hold(v) { testHold = !!v; last = performance.now(); acc = 0; }, enterEditor, exitEditor, get mode() { return mode; }, setMode, openModes, closeModes, get menuOpen() { return menuOpen; },
   get gravity() { return { gx, gy, dir: gdir, flipT, turning: turnT >= 0, nextDir, flips, hold: flipHold, ceil: ceilY }; }, flipIn(s) { flipT = s; }, fill: () => fillFrac(), get zenCleared() { return zenCleared; }, get padOn() { return padOn; }, get padPlaying() { return !!pad; }, setPad, get dangerT() { return dangerT; }, contactsDbg() { const o = []; for (let k = 0; k < ccount; k++) { const C = cpool[k]; const ca = Math.cos(C.a.a), sa = Math.sin(C.a.a); o.push({ a: C.a.id, b: C.b ? C.b.id : null, nx: +C.nx.toFixed(3), ny: +C.ny.toFixed(3), px: +(C.a.x + C.ax * ca - C.ay * sa).toFixed(2), py: +(C.a.y + C.ax * sa + C.ay * ca).toFixed(2), dep: +C.dep.toFixed(2), lam: +C.lam.toFixed(3) }); } return o; }, physStats, haptic, get vibe() { return vibeOn; }, set vibe(v) { setVibe(v); }, canVibe, get finEnd() { return finEnd; }, get interaction() { return inter; }, set interactions(v) { interOn = v; if (!v) inter = null; }, interact(kind) { inter = pickInteraction(kind); return !!inter; }, hfGeom, HF: { IN: HF_IN, HOLD: HF_HOLD, OUT: HF_OUT }, pickKind, slapDbg: { get log() { return slapLog; }, get pending() { return pendingRet; }, cd: slapCD, blocked: (a, b) => slapBlocked(a, b), tick(dt) { time += dt; updateInteraction(dt); } }, get time() { return time; },
