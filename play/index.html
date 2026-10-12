@@ -120,6 +120,9 @@
   body.mode-zen #score{opacity:.55;font-size:.8em}
   @media (max-width:520px){.modeOpt canvas{width:60px;height:60px;flex-basis:60px}.modeOpt b{font-size:14px}}
   #secretP{cursor:inherit;color:inherit;text-shadow:inherit;pointer-events:auto}
+  #secretG,#secretP{display:inline-block;padding:8px 3px;margin:-8px -3px;-webkit-tap-highlight-color:transparent}
+  #secretG{cursor:pointer;color:inherit;text-shadow:inherit;pointer-events:auto;transition:text-shadow .2s,color .2s}
+  #secretG.playing{color:#ffe9a8;text-shadow:0 0 14px rgba(255,220,140,.95),0 0 28px rgba(255,180,90,.6)}
   @media (max-width:520px){.title{font-size:12px;letter-spacing:2px;flex:0 0 auto;text-align:left}.title small{display:none}#hud{padding-left:10px;flex-wrap:wrap;row-gap:4px}.stat{min-width:54px}.val{font-size:22px}.btns{flex:1 1 100%;order:5;justify-content:space-evenly}.btns .iconbtn{width:36px;height:36px}}
   .tag{display:none;font-size:9px;letter-spacing:1.5px;font-weight:800;color:#ffd23f}
   body.tainted .tag{display:block}
@@ -182,7 +185,7 @@
 <canvas id="fx" style="position:fixed;inset:0;width:100%;height:100%;z-index:40;pointer-events:none;display:block"></canvas>
 <div id="app">
   <div id="hud" class="panel">
-    <div class="title">GROK DRO<span id="secretP">P</span><small>MERGE THE BOTS</small></div>
+    <div class="title"><span id="secretG">G</span>ROK DRO<span id="secretP">P</span><small>MERGE THE BOTS</small></div>
     <div class="stat scoreStat"><span class="label">SCORE</span><span class="val" id="score">0</span><div id="comboMeter" aria-hidden="true"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" class="trk"/><circle cx="18" cy="18" r="15" class="arc" id="comboArc"/></svg><b id="comboTxt">x2</b></div></div>
     <div class="stat best"><span class="label">BEST</span><span class="val" id="best">0</span><span class="tag">UNRANKED</span></div>
     <div class="next"><span class="label">NEXT</span><canvas id="nextc" width="168" height="168"></canvas></div>
@@ -1668,6 +1671,16 @@ muteBtn.addEventListener('click', e => { e.preventDefault(); ensureAudio(); setM
 document.getElementById('shakeBtn').addEventListener('click', e => { e.preventDefault(); ensureAudio(); doShake(); });
 pauseBtn.addEventListener('click', e => { e.preventDefault(); ensureAudio(); sfx.click(); if (state === 'editor') { physPaused = !physPaused; updateEditorUI(); } else setPaused(state !== 'paused'); });
 $('secretP').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openCode(); });
+// easter egg: the G plays the song clip (inside the gesture for iOS); restarts on re-tap; ducks the music; respects Sound mute (not the Music toggle)
+const gClip = new Audio('g.mp3'); gClip.preload = 'auto'; gClip.volume = 0.85; let gDuck = false;
+function gDuckMusic(on) { gDuck = on; if (!pad || !actx) return; const t = actx.currentTime; pad.lvl.gain.cancelScheduledValues(t); pad.lvl.gain.setTargetAtTime(on ? 0.0001 : pad.base, t, on ? 0.12 : 0.7); }
+function gEnd() { $('secretG').classList.remove('playing'); if (gDuck) gDuckMusic(false); }
+gClip.addEventListener('ended', gEnd); gClip.addEventListener('pause', () => { if (gClip.currentTime > 0 && gClip.ended === false && gClip.paused) gEnd(); });
+$('secretG').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); ensureAudio();
+  if (muted) { $('secretG').animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-2px)' }, { transform: 'translateX(2px)' }, { transform: 'translateX(0)' }], { duration: 220 }); return; }
+  try { gClip.currentTime = 0; } catch (_) {}
+  const pr = gClip.play(); $('secretG').classList.add('playing'); gDuckMusic(true);
+  if (pr && pr.catch) pr.catch(() => gEnd()); });
 $('codeOk').addEventListener('click', e => { e.preventDefault(); submitCode(); });
 $('codeCancel').addEventListener('click', e => { e.preventDefault(); closeCode(); });
 codeInput.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); submitCode(); } else if (e.key === 'Escape') { e.preventDefault(); closeCode(); } });
@@ -1713,7 +1726,7 @@ window.addEventListener('keydown', e => {
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
 ['touchstart', 'touchmove', 'touchend'].forEach(t => document.addEventListener(t, e => {
-  if (e.target.closest && e.target.closest('button,input,#secretP,.card,#collection,#editorBar,.overlay,details')) return;   // the trophy room / editor strip must scroll natively and get taps (this blanket preventDefault was killing them on iOS)
+  if (e.target.closest && e.target.closest('button,input,#secretP,#secretG,.card,#collection,#editorBar,.overlay,details')) return;   // the trophy room / editor strip must scroll natively and get taps (this blanket preventDefault was killing them on iOS)
   if (e.cancelable) e.preventDefault();
 }, { passive: false }));
 ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault()));
@@ -2507,10 +2520,10 @@ function makeMusic(ac, dest, zen, rnd = Math.random) {
 function startPad() {
   if (pad || !actx || !padOn || document.hidden) return;
   try {
-    const zen = mode === 'zen', t = actx.currentTime, lvl = actx.createGain(); lvl.gain.setValueAtTime(0.0001, t); lvl.gain.exponentialRampToValueAtTime(zen ? 0.5 : 0.42, t + 3); lvl.connect(softLP || actx.destination);
+    const zen = mode === 'zen', t = actx.currentTime, lvl = actx.createGain(); lvl.gain.setValueAtTime(0.0001, t); if (!gDuck) lvl.gain.exponentialRampToValueAtTime(zen ? 0.5 : 0.42, t + 3); lvl.connect(softLP || actx.destination);
     const M = makeMusic(actx, lvl, zen); M.tick(actx.currentTime + 2.5);
     const iv = setInterval(() => { if (pad && actx.state === 'running') M.tick(actx.currentTime + 2.5); }, 500);
-    pad = { lvl, M, iv, get notes() { return M.st.notes; }, get chords() { return M.st.chords; } };
+    pad = { lvl, M, iv, base: zen ? 0.5 : 0.42, get notes() { return M.st.notes; }, get chords() { return M.st.chords; } };
   } catch (e) { pad = null; }
 }
 function stopPad() {
@@ -2967,6 +2980,7 @@ window.GrokDrop = {
  wish: { get streak() { return wishStreak; }, get best() { return stats.bestWishStreak | 0; }, BONUS: WISH_BONUS,
    spawnCatch() { spawnShooting(innerWidth, innerHeight, false, null); const m = SH_POOL.find(o => o.on && !o.hole && !o.caught && o.life === 0); if (m) catchWish(m, m.x, m.y); return !!m; },
    spawnMiss() { spawnShooting(innerWidth, innerHeight, false, null); const m = SH_POOL.find(o => o.on && !o.hole && !o.caught && o.life === 0); if (m) m.life = m.max; return !!m; } },
+ gclip: { get playing() { return !gClip.paused; }, get t() { return gClip.currentTime; }, get ducked() { return gDuck; }, get musicGain() { return pad ? pad.lvl.gain.value : null; } },
  music: { render: async (sec, zen) => { const [L, R] = await renderMusicOffline(sec, zen); let pk = 0; for (let i = 0; i < L.length; i++) pk = Math.max(pk, Math.abs(L[i]), Math.abs(R[i]));
      const n = L.length, b = new Int16Array(n * 2), k = pk > 0 ? 0.5 / pk : 1; for (let i = 0; i < n; i++) { b[2 * i] = L[i] * k * 32767; b[2 * i + 1] = R[i] * k * 32767; }
      let str = ''; const u = new Uint8Array(b.buffer); for (let i = 0; i < u.length; i += 32768) str += String.fromCharCode.apply(null, u.subarray(i, i + 32768)); return { b64: btoa(str), peak: pk }; },
