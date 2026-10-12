@@ -2458,42 +2458,69 @@ function zenStep(dt) {
   const v = cand[0]; v.fade = 0; v.mcd = 999; react(v, 'happy', 1.2); wake(v); zenCleared++; zenT = 0.75;
   burst(v.x, v.y, '#ffffff', 6, 60, 2); tone(880, 1175, 0.4, 'sine', 0.04);
 }
-// ---- ambient space music (all modes): slow drifting pad + soft drone + sparse twinkly arpeggio through a feedback-delay "reverb".
-// Own bus straight to the output (independent of the SFX master/mute); starts on the first gesture via ensureAudio; stops while hidden.
+// ---- ambient space lullaby (all modes). D major / lydian, consonant voicings only, slow crossfading chords, soft celesta
+// phrases around chord tones, warm convolution reverb. One scheduler serves real-time play and offline rendering.
+// Own bus straight to the output (independent of the SFX master/mute); starts on the first gesture; stops while hidden.
 let pad = null;
-const MUS_ROOTS = [55, 49, 43.65, 58.27, 41.2], MUS_VOICINGS = [[-12, 7, 16, 19], [-12, 4, 11, 14], [-12, 7, 14, 21], [-12, 9, 16, 19], [-5, 7, 12, 16]], MUS_SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19];
+function makeIR(ac, sec) {   // warm stereo reverb tail: decaying noise, darkening over time
+  const n = Math.round(ac.sampleRate * sec), pre = Math.round(ac.sampleRate * 0.025), buf = ac.createBuffer(2, n, ac.sampleRate);
+  for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); let y = 0;
+    for (let i = pre; i < n; i++) { const t = (i - pre) / (n - pre), a = 0.5 - 0.42 * t; y += a * ((Math.random() * 2 - 1) - y); d[i] = y * Math.exp(-6.2 * t) * 1.6; } }
+  return buf;
+}
+const MUS_CH = { I: [0, 7, 11, 16, 19], IV: [5, 12, 16, 21], vi: [4, 9, 11, 16, 19], Ilyd: [0, 7, 14, 18, 21] };   // semitones from D3; Dmaj7, Gmaj7, Bm9 (no 3rd: no m2 rub), D6/9#11
+const MUS_BASS = { I: 0, IV: -7, vi: -3, Ilyd: 0 }, MUS_NEXT = { I: ['IV', 'vi', 'Ilyd', 'IV'], IV: ['I', 'vi', 'I'], vi: ['IV', 'I', 'IV'], Ilyd: ['I', 'IV'] };
+const MUS_PENTA = [12, 14, 16, 19, 21, 24, 26, 28, 31, 33, 36];   // D major pentatonic, D4..D6
+function makeMusic(ac, dest, zen, rnd = Math.random) {
+  const F = st => 146.83 * Math.pow(2, st / 12), pick = a => a[Math.floor(rnd() * a.length)];
+  const out = ac.createGain(), hp = ac.createBiquadFilter(), hp2 = ac.createBiquadFilter(); hp.type = hp2.type = 'highpass'; hp.frequency.value = hp2.frequency.value = 120; hp.Q.value = hp2.Q.value = 0.6; out.connect(hp); hp.connect(hp2); hp2.connect(dest);   // no low rumble under the SFX
+  const rv = ac.createConvolver(); rv.buffer = makeIR(ac, 3.8); const wet = ac.createGain(); wet.gain.value = 0.5; rv.connect(wet); wet.connect(out);
+  const padLP = ac.createBiquadFilter(); padLP.type = 'lowpass'; padLP.frequency.value = 1500; padLP.Q.value = 0.3; padLP.connect(out); const ps = ac.createGain(); ps.gain.value = 0.5; padLP.connect(ps); ps.connect(rv);
+  const bellLP = ac.createBiquadFilter(); bellLP.type = 'lowpass'; bellLP.frequency.value = 4200; bellLP.connect(out); const bs = ac.createGain(); bs.gain.value = 0.85; bellLP.connect(bs); bs.connect(rv);
+  const st = { chord: 'I', mchord: 'I', sw: [], nextChord: ac.currentTime + 0.05, nextNote: ac.currentTime + 2, phrase: [], notes: 0, chords: 0, prevIdx: 6 };
+  const voice = (f, t0, t1, v, type, det = 0) => { const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = f; o.detune.value = det;
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(v, t0 + 4.5); g.gain.setValueAtTime(v, t1); g.gain.setTargetAtTime(0, t1, 2.2);   // 4.5 s swell, long release
+    o.connect(g); g.connect(padLP); o.start(t0); o.stop(t1 + 9); };
+  const chordAt = (t, dur) => { const c = MUS_CH[st.chord];
+    for (const n of c) { voice(F(n), t, t + dur, n < 7 ? 0.018 : 0.028, 'sine'); voice(F(n), t, t + dur, 0.007, 'triangle', 2); }   // <= 2 cents, no beating
+    voice(F(MUS_BASS[st.chord] + 12), t, t + dur, 0.012, 'sine'); st.chords++; };
+  const bell = (f, t, v) => { for (const [m, g0, dec] of [[1, v, 3.2], [2, v * 0.14, 1.1], [3, v * 0.025, 0.45]]) { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.value = f * m;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(g0, t + 0.018); g.gain.setTargetAtTime(0, t + 0.018, dec / 4.6); o.connect(g); g.connect(bellLP); o.start(t); o.stop(t + dec + 0.3); }
+    if (rnd() < 0.25) { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.value = f * 2; g.gain.setValueAtTime(0, t + 0.03); g.gain.linearRampToValueAtTime(v * 0.12, t + 0.4); g.gain.setTargetAtTime(0, t + 0.4, 1.0); o.connect(g); g.connect(bs); o.start(t); o.stop(t + 5); }   // faint shimmer, reverb only
+    st.notes++; };
+  const chordIdx = () => { const pcs = MUS_CH[st.mchord].map(n => ((n % 12) + 12) % 12); return MUS_PENTA.map((n, i) => pcs.includes(n % 12) ? i : -1).filter(i => i >= 0); };
+  const nearest = (idx, list) => list.reduce((b, i) => Math.abs(i - idx) < Math.abs(b - idx) ? i : b, list[0]);
+  function tick(until) {
+    while (st.nextChord < until) { if (st.chords) st.chord = pick(MUS_NEXT[st.chord]); const dur = (zen ? 16 : 12) + rnd() * 8; chordAt(st.nextChord, dur + 1); st.sw.push([st.nextChord + 1.5, st.chord]); st.nextChord += dur; }
+    while (st.nextNote < until) {
+      while (st.sw.length && st.sw[0][0] <= st.nextNote) st.mchord = st.sw.shift()[1];   // melody follows the pad once the new chord has swelled in
+      if (!st.phrase.length) {   // compose a short phrase: chord tone -> gentle steps -> resolve to a chord tone
+        const ct = chordIdx().filter(i => i >= 3 && i <= 9), len = 2 + Math.floor(rnd() * (zen ? 3 : 4)); let idx = nearest(st.prevIdx + (rnd() < 0.5 ? -1 : 1), ct); const ph = [idx];
+        for (let j = 1; j < len - 1; j++) { idx = Math.max(2, Math.min(10, idx + pick([-1, -1, 1, 1, -2, 2, 0]))); ph.push(idx); }
+        if (len > 1) ph.push(nearest(idx, ct)); st.phrase = ph; }
+      const i = st.phrase.shift(); st.prevIdx = i; bell(F(MUS_PENTA[i]), st.nextNote, (zen ? 0.1 : 0.12) * (0.75 + rnd() * 0.25));
+      const beat = zen ? 0.95 : 0.8; st.nextNote += st.phrase.length ? beat * pick([1, 1, 1, 1.5, 2]) : (zen ? 5 : 3.5) + rnd() * (zen ? 6 : 4.5);   // rests between phrases
+    }
+  }
+  return { out, st, tick };
+}
 function startPad() {
   if (pad || !actx || !padOn || document.hidden) return;
   try {
-    const t = actx.currentTime, zen = mode === 'zen', P2 = st => Math.pow(2, st / 12);
-    const out = actx.createGain(); out.gain.setValueAtTime(0.0001, t); out.gain.exponentialRampToValueAtTime(zen ? 0.12 : 0.09, t + 4); out.connect(softLP || actx.destination);
-    const send = actx.createGain(), dl1 = actx.createDelay(2), dl2 = actx.createDelay(2), fb1 = actx.createGain(), fb2 = actx.createGain(), dlp = actx.createBiquadFilter(), wet = actx.createGain();
-    dl1.delayTime.value = 0.43; dl2.delayTime.value = 0.71; fb1.gain.value = 0.4; fb2.gain.value = 0.33; dlp.type = 'lowpass'; dlp.frequency.value = 2000; wet.gain.value = 0.55;
-    send.connect(dl1); send.connect(dl2); dl1.connect(dlp); dl2.connect(dlp); dlp.connect(fb1); dlp.connect(fb2); fb1.connect(dl1); fb2.connect(dl2); dlp.connect(wet); wet.connect(out);
-    const lp = actx.createBiquadFilter(), lfo = actx.createOscillator(), lg = actx.createGain(), padG = actx.createGain(), ps = actx.createGain();
-    lp.type = 'lowpass'; lp.frequency.value = 650; lp.Q.value = 0.5; lfo.frequency.value = 0.043; lg.gain.value = 300; lfo.connect(lg); lg.connect(lp.frequency); lfo.start(t);
-    padG.gain.value = 1; ps.gain.value = 0.25; lp.connect(padG); padG.connect(out); padG.connect(ps); ps.connect(send);
-    let root = MUS_ROOTS[0], vo = MUS_VOICINGS[0];
-    const oscs = [lfo], vs = [];
-    vo.forEach((st, i) => { const g = actx.createGain(); g.gain.value = 0.1; g.connect(lp);
-      for (const det of [-6, 6]) { const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = root * 4 * P2(st); o.detune.value = det; o.connect(g); o.start(t); oscs.push(o); vs.push({ o, i }); } vs.push({ g, i }); });
-    const dr = actx.createOscillator(), dg = actx.createGain(); dr.type = 'triangle'; dr.frequency.value = root; dg.gain.value = 0.22; dr.connect(dg); dg.connect(lp); dr.start(t); oscs.push(dr);   // soft drone
-    const chordT = () => { if (!pad) return; let nr; do nr = MUS_ROOTS[Math.floor(Math.random() * MUS_ROOTS.length)]; while (nr === root); root = nr; vo = MUS_VOICINGS[Math.floor(Math.random() * MUS_VOICINGS.length)];
-      const tt = actx.currentTime; for (const v of vs) { if (v.o) v.o.frequency.setTargetAtTime(root * 4 * P2(vo[v.i]), tt, 2.4); else v.g.gain.setTargetAtTime(0.06 + Math.random() * 0.08, tt, 3); }
-      dr.frequency.setTargetAtTime(root, tt, 3); pad.chords++; pad.ct = setTimeout(chordT, (zen ? 13000 : 10000) + Math.random() * 6000); };
-    const pluck = (f, when, v) => { const o = actx.createOscillator(), o2 = actx.createOscillator(), g = actx.createGain(); o.type = 'sine'; o2.type = 'triangle'; o.frequency.value = f; o2.frequency.value = f * 2; o2.detune.value = 4;
-      g.gain.setValueAtTime(0.0001, when); g.gain.exponentialRampToValueAtTime(v, when + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, when + 1.6);
-      const g2 = actx.createGain(); g2.gain.value = 0.18; o.connect(g); o2.connect(g2); g2.connect(g); g.connect(out); g.connect(send);
-      o.start(when); o2.start(when); o.stop(when + 1.7); o2.stop(when + 1.7); pad.notes++; };
-    const arp = setInterval(() => { if (!pad || actx.state !== 'running') return; if (Math.random() > (zen ? 0.16 : 0.24)) return;   // sparse, never the same phrase twice
-      const tt = actx.currentTime + 0.05, f = root * 8 * P2(MUS_SCALE[Math.floor(Math.random() * MUS_SCALE.length)]); pluck(f, tt, 0.05 + Math.random() * 0.03);
-      if (Math.random() < 0.3) pluck(f * P2(7), tt + 0.18 + Math.random() * 0.1, 0.03); }, zen ? 420 : 330);
-    pad = { out, oscs, arp, ct: 0, notes: 0, chords: 0 }; pad.ct = setTimeout(chordT, 8000 + Math.random() * 4000);
+    const zen = mode === 'zen', t = actx.currentTime, lvl = actx.createGain(); lvl.gain.setValueAtTime(0.0001, t); lvl.gain.exponentialRampToValueAtTime(zen ? 0.5 : 0.42, t + 3); lvl.connect(softLP || actx.destination);
+    const M = makeMusic(actx, lvl, zen); M.tick(actx.currentTime + 2.5);
+    const iv = setInterval(() => { if (pad && actx.state === 'running') M.tick(actx.currentTime + 2.5); }, 500);
+    pad = { lvl, M, iv, get notes() { return M.st.notes; }, get chords() { return M.st.chords; } };
   } catch (e) { pad = null; }
 }
 function stopPad() {
-  if (!pad) return; const p = pad; pad = null; clearInterval(p.arp); clearTimeout(p.ct);
-  try { const t = actx.currentTime; p.out.gain.cancelScheduledValues(t); p.out.gain.setTargetAtTime(0.0001, t, 0.4); for (const o of p.oscs) o.stop(t + 2.2); setTimeout(() => { try { p.out.disconnect(); } catch (e) {} }, 2600); } catch (e) {}
+  if (!pad) return; const p = pad; pad = null; clearInterval(p.iv);
+  try { const t = actx.currentTime; p.lvl.gain.cancelScheduledValues(t); p.lvl.gain.setTargetAtTime(0.0001, t, 0.4); setTimeout(() => { try { p.lvl.disconnect(); } catch (e) {} }, 2600); } catch (e) {}
+}
+async function renderMusicOffline(sec = 60, zen = false) {   // for previews: same engine, rendered faster than real time
+  const sr = 44100, oc = new OfflineAudioContext(2, sr * sec, sr), lvl = oc.createGain(); lvl.gain.value = zen ? 0.5 : 0.42;
+  const comp = oc.createDynamicsCompressor(); lvl.connect(comp); comp.connect(oc.destination); const M = makeMusic(oc, lvl, zen); M.tick(sec);
+  const buf = await oc.startRendering(); return [buf.getChannelData(0), buf.getChannelData(1)];
 }
 document.addEventListener('visibilitychange', () => { if (!actx) return; if (document.hidden) { stopPad(); actx.suspend && actx.suspend(); } else { actx.resume && actx.resume(); startPad(); } });   // no music (or CPU) while hidden
 function setPad(on) { padOn = on; store(PAD_KEY, on ? '1' : '0'); $('padBtn').classList.toggle('off', !on); if (on) { ensureAudio(); startPad(); } else stopPad(); }
@@ -2940,7 +2967,10 @@ window.GrokDrop = {
  wish: { get streak() { return wishStreak; }, get best() { return stats.bestWishStreak | 0; }, BONUS: WISH_BONUS,
    spawnCatch() { spawnShooting(innerWidth, innerHeight, false, null); const m = SH_POOL.find(o => o.on && !o.hole && !o.caught && o.life === 0); if (m) catchWish(m, m.x, m.y); return !!m; },
    spawnMiss() { spawnShooting(innerWidth, innerHeight, false, null); const m = SH_POOL.find(o => o.on && !o.hole && !o.caught && o.life === 0); if (m) m.life = m.max; return !!m; } },
- music: { get on() { return padOn; }, get playing() { return !!pad; }, get notes() { return pad ? pad.notes : 0; }, get ctx() { return actx ? actx.state : null; }, set: on => setPad(on), get muted() { return muted; } },
+ music: { render: async (sec, zen) => { const [L, R] = await renderMusicOffline(sec, zen); let pk = 0; for (let i = 0; i < L.length; i++) pk = Math.max(pk, Math.abs(L[i]), Math.abs(R[i]));
+     const n = L.length, b = new Int16Array(n * 2), k = pk > 0 ? 0.5 / pk : 1; for (let i = 0; i < n; i++) { b[2 * i] = L[i] * k * 32767; b[2 * i + 1] = R[i] * k * 32767; }
+     let str = ''; const u = new Uint8Array(b.buffer); for (let i = 0; i < u.length; i += 32768) str += String.fromCharCode.apply(null, u.subarray(i, i + 32768)); return { b64: btoa(str), peak: pk }; },
+   get on() { return padOn; }, get playing() { return !!pad; }, get notes() { return pad ? pad.notes : 0; }, get ctx() { return actx ? actx.state : null; }, set: on => setPad(on), get muted() { return muted; } },
  col: { set debugHitbox(v) { colDbg = !!v; }, set freeze(v) { colFreeze = v; }, tap: i => tapCard(i), get lastMove() { return colLastMove; }, SIG_IDS, SIG_DUR, SIG_DURS, frame: (c, i, W, H, k, seen = true) => drawSigFrame(c, i, W, H, seen, k < 0 ? null : { kind: seen ? 'sig' : 'wobble', t: k }, 1.0), get reacts() { return colCards.map(o => o.react && o.react.id); } },
   openCollection, closeCollection, get colOpen() { return colOpen; }, set hold(v) { testHold = !!v; last = performance.now(); acc = 0; }, enterEditor, exitEditor, get mode() { return mode; }, setMode, openModes, closeModes, get menuOpen() { return menuOpen; },
   get gravity() { return { gx, gy, dir: gdir, flipT, turning: turnT >= 0, nextDir, flips, hold: flipHold, ceil: ceilY }; }, flipIn(s) { flipT = s; }, fill: () => fillFrac(), get zenCleared() { return zenCleared; }, get padOn() { return padOn; }, get padPlaying() { return !!pad; }, setPad, get dangerT() { return dangerT; }, contactsDbg() { const o = []; for (let k = 0; k < ccount; k++) { const C = cpool[k]; const ca = Math.cos(C.a.a), sa = Math.sin(C.a.a); o.push({ a: C.a.id, b: C.b ? C.b.id : null, nx: +C.nx.toFixed(3), ny: +C.ny.toFixed(3), px: +(C.a.x + C.ax * ca - C.ay * sa).toFixed(2), py: +(C.a.y + C.ax * sa + C.ay * ca).toFixed(2), dep: +C.dep.toFixed(2), lam: +C.lam.toFixed(3) }); } return o; }, physStats, haptic, get vibe() { return vibeOn; }, set vibe(v) { setVibe(v); }, canVibe, get finEnd() { return finEnd; }, get interaction() { return inter; }, set interactions(v) { interOn = v; if (!v) inter = null; }, interact(kind) { inter = pickInteraction(kind); return !!inter; }, hfGeom, HF: { IN: HF_IN, HOLD: HF_HOLD, OUT: HF_OUT }, pickKind, slapDbg: { get log() { return slapLog; }, get pending() { return pendingRet; }, cd: slapCD, blocked: (a, b) => slapBlocked(a, b), tick(dt) { time += dt; updateInteraction(dt); } }, get time() { return time; },
